@@ -67,15 +67,11 @@ object \"C_54\" {
             let _4 := var__init_12
             let expr_16 := _4
             /// @src 0:203:219
-            update_storage_value_offset_0t_int256_to_t_int256(0x00, expr_16)
+            setter_fun_stateVar_10(expr_16)
             let expr_17 := expr_16
 
         }
         /// @src 0:79:428
-
-        function convert_t_int256_to_t_int256(value) -> converted {
-            converted := cleanup_t_int256(value)
-        }
 
         function convert_t_rational_42_by_1_to_t_int256(value) -> converted {
             converted := cleanup_t_int256(value)
@@ -104,10 +100,6 @@ object \"C_54\" {
             revert(0, 0x24)
         }
 
-        function prepare_store_t_int256(value) -> ret {
-            ret := value
-        }
-
         function revert_error_c1322bf8034eace5e0b5c7295db60986aa89aae5e0ea0873e4689e076861a5db() {
             revert(0, 0)
         }
@@ -124,23 +116,8 @@ object \"C_54\" {
             result := and(add(value, 31), not(31))
         }
 
-        function shift_left_0(value) -> newValue {
-            newValue :=
-
-            shl(0, value)
-
-        }
-
-        function update_byte_slice_32_shift_0(value, toInsert) -> result {
-            let mask := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-            toInsert := shift_left_0(toInsert)
-            value := and(value, not(mask))
-            result := or(value, and(toInsert, mask))
-        }
-
-        function update_storage_value_offset_0t_int256_to_t_int256(slot, value_0) {
-            let convertedValue_0 := convert_t_int256_to_t_int256(value_0)
-            sstore(slot, update_byte_slice_32_shift_0(sload(slot), prepare_store_t_int256(convertedValue_0)))
+        function setter_fun_stateVar_10(value) {
+            revert(0, 0) /// WARP STUB
         }
 
         function validator_revert_t_int256(value) {
@@ -253,10 +230,6 @@ object \"C_54\" {
                 sum := add(x, y)
             }
 
-            function cleanup_from_storage_t_int256(value) -> cleaned {
-                cleaned := value
-            }
-
             function cleanup_t_int256(value) -> cleaned {
                 cleaned := value
             }
@@ -278,10 +251,6 @@ object \"C_54\" {
                 converted := convert_t_uint160_to_t_address(value)
             }
 
-            function convert_t_int256_to_t_int256(value) -> converted {
-                converted := cleanup_t_int256(value)
-            }
-
             function convert_t_rational_41_by_1_to_t_int256(value) -> converted {
                 converted := cleanup_t_int256(value)
             }
@@ -292,14 +261,6 @@ object \"C_54\" {
 
             function convert_t_uint160_to_t_uint160(value) -> converted {
                 converted := cleanup_t_uint160(value)
-            }
-
-            function extract_from_storage_value_dynamict_int256(slot_value, offset) -> value {
-                value := cleanup_from_storage_t_int256(shift_right_unsigned_dynamic(mul(offset, 8), slot_value))
-            }
-
-            function extract_from_storage_value_offset_0t_int256(slot_value) -> value {
-                value := cleanup_from_storage_t_int256(shift_right_0_unsigned(slot_value))
             }
 
             function finalize_allocation(memPtr, size) {
@@ -324,7 +285,7 @@ object \"C_54\" {
                 var__42 := _8
 
                 /// @src 0:392:400
-                let _9 := read_from_storage_split_offset_0_t_int256(0x00)
+                let _9 := getter_fun_stateVar_10()
                 let expr_44 := _9
                 /// @src 0:403:407
                 let expr_45_address := address()
@@ -389,16 +350,9 @@ object \"C_54\" {
             }
             /// @src 0:79:428
 
-            /// @src 0:152:171
-            function getter_fun_stateVar_10() -> ret {
-
-                let slot := 0
-                let offset := 0
-
-                ret := read_from_storage_split_dynamic_t_int256(slot, offset)
-
+            function getter_fun_stateVar_10() -> value {
+                revert(0, 0) /// WARP STUB
             }
-            /// @src 0:79:428
 
             function increment_t_int256(value) -> ret {
                 value := cleanup_t_int256(value)
@@ -411,9 +365,9 @@ object \"C_54\" {
                 _5 := var__42
 
                 /// @src 0:322:332
-                let _7 := read_from_storage_split_offset_0_t_int256(0x00)
+                let _7 := getter_fun_stateVar_10()
                 let _6 := increment_t_int256(_7)
-                update_storage_value_offset_0t_int256_to_t_int256(0x00, _6)
+                setter_fun_stateVar_10(_6)
                 let expr_33 := _7
                 /// @src 0:336:337
                 _5 := fun_f2_53_inner(var__42)
@@ -431,20 +385,6 @@ object \"C_54\" {
                 mstore(0, 35408467139433450592217433187231851964531694900788300625387963629091585785856)
                 mstore(4, 0x41)
                 revert(0, 0x24)
-            }
-
-            function prepare_store_t_int256(value) -> ret {
-                ret := value
-            }
-
-            function read_from_storage_split_dynamic_t_int256(slot, offset) -> value {
-                value := extract_from_storage_value_dynamict_int256(sload(slot), offset)
-
-            }
-
-            function read_from_storage_split_offset_0_t_int256(slot) -> value {
-                value := extract_from_storage_value_offset_0t_int256(sload(slot))
-
             }
 
             function revert_error_0cc013b6b3b6beabea4e3a74a6d380f0df81852ca99887912475e1f66b2a2c20() {
@@ -477,11 +417,8 @@ object \"C_54\" {
                 result := and(add(value, 31), not(31))
             }
 
-            function shift_left_0(value) -> newValue {
-                newValue :=
-
-                shl(0, value)
-
+            function setter_fun_stateVar_10(value) {
+                revert(0, 0) /// WARP STUB
             }
 
             function shift_left_224(value) -> newValue {
@@ -491,37 +428,11 @@ object \"C_54\" {
 
             }
 
-            function shift_right_0_unsigned(value) -> newValue {
-                newValue :=
-
-                shr(0, value)
-
-            }
-
             function shift_right_224_unsigned(value) -> newValue {
                 newValue :=
 
                 shr(224, value)
 
-            }
-
-            function shift_right_unsigned_dynamic(bits, value) -> newValue {
-                newValue :=
-
-                shr(bits, value)
-
-            }
-
-            function update_byte_slice_32_shift_0(value, toInsert) -> result {
-                let mask := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-                toInsert := shift_left_0(toInsert)
-                value := and(value, not(mask))
-                result := or(value, and(toInsert, mask))
-            }
-
-            function update_storage_value_offset_0t_int256_to_t_int256(slot, value_0) {
-                let convertedValue_0 := convert_t_int256_to_t_int256(value_0)
-                sstore(slot, update_byte_slice_32_shift_0(sload(slot), prepare_store_t_int256(convertedValue_0)))
             }
 
             function validator_revert_t_int256(value) {
@@ -602,10 +513,6 @@ object \"D_72\" {
             sum := add(x, y)
         }
 
-        function cleanup_from_storage_t_int256(value) -> cleaned {
-            cleaned := value
-        }
-
         function cleanup_t_int256(value) -> cleaned {
             cleaned := value
         }
@@ -624,7 +531,7 @@ object \"D_72\" {
             let _7 := var__init_12
             let expr_16 := _7
             /// @src 0:203:219
-            update_storage_value_offset_0t_int256_to_t_int256(0x00, expr_16)
+            setter_fun_stateVar_10(expr_16)
             let expr_17 := expr_16
 
         }
@@ -643,17 +550,13 @@ object \"D_72\" {
             let _4 := var__init2_63
             let expr_67 := _4
             /// @src 1:142:160
-            let _5 := read_from_storage_split_offset_0_t_int256(0x00)
+            let _5 := getter_fun_stateVar_10()
             let expr_68 := checked_add_t_int256(_5, expr_67)
 
-            update_storage_value_offset_0t_int256_to_t_int256(0x00, expr_68)
+            setter_fun_stateVar_10(expr_68)
 
         }
         /// @src 1:91:166
-
-        function convert_t_int256_to_t_int256(value) -> converted {
-            converted := cleanup_t_int256(value)
-        }
 
         function convert_t_rational_3_by_1_to_t_int256(value) -> converted {
             converted := cleanup_t_int256(value)
@@ -673,15 +576,15 @@ object \"D_72\" {
             ret_param_0 := abi_decode_tuple_t_int256_fromMemory(memoryDataOffset, add(memoryDataOffset, argSize))
         }
 
-        function extract_from_storage_value_offset_0t_int256(slot_value) -> value {
-            value := cleanup_from_storage_t_int256(shift_right_0_unsigned(slot_value))
-        }
-
         function finalize_allocation(memPtr, size) {
             let newFreePtr := add(memPtr, round_up_to_mul_of_32(size))
             // protect against overflow
             if or(gt(newFreePtr, 0xffffffffffffffff), lt(newFreePtr, memPtr)) { panic_error_0x41() }
             mstore(64, newFreePtr)
+        }
+
+        function getter_fun_stateVar_10() -> value {
+            revert(0, 0) /// WARP STUB
         }
 
         function panic_error_0x11() {
@@ -694,15 +597,6 @@ object \"D_72\" {
             mstore(0, 35408467139433450592217433187231851964531694900788300625387963629091585785856)
             mstore(4, 0x41)
             revert(0, 0x24)
-        }
-
-        function prepare_store_t_int256(value) -> ret {
-            ret := value
-        }
-
-        function read_from_storage_split_offset_0_t_int256(slot) -> value {
-            value := extract_from_storage_value_offset_0t_int256(sload(slot))
-
         }
 
         function revert_error_c1322bf8034eace5e0b5c7295db60986aa89aae5e0ea0873e4689e076861a5db() {
@@ -721,30 +615,8 @@ object \"D_72\" {
             result := and(add(value, 31), not(31))
         }
 
-        function shift_left_0(value) -> newValue {
-            newValue :=
-
-            shl(0, value)
-
-        }
-
-        function shift_right_0_unsigned(value) -> newValue {
-            newValue :=
-
-            shr(0, value)
-
-        }
-
-        function update_byte_slice_32_shift_0(value, toInsert) -> result {
-            let mask := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-            toInsert := shift_left_0(toInsert)
-            value := and(value, not(mask))
-            result := or(value, and(toInsert, mask))
-        }
-
-        function update_storage_value_offset_0t_int256_to_t_int256(slot, value_0) {
-            let convertedValue_0 := convert_t_int256_to_t_int256(value_0)
-            sstore(slot, update_byte_slice_32_shift_0(sload(slot), prepare_store_t_int256(convertedValue_0)))
+        function setter_fun_stateVar_10(value) {
+            revert(0, 0) /// WARP STUB
         }
 
         function validator_revert_t_int256(value) {
@@ -857,10 +729,6 @@ object \"D_72\" {
                 sum := add(x, y)
             }
 
-            function cleanup_from_storage_t_int256(value) -> cleaned {
-                cleaned := value
-            }
-
             function cleanup_t_int256(value) -> cleaned {
                 cleaned := value
             }
@@ -882,10 +750,6 @@ object \"D_72\" {
                 converted := convert_t_uint160_to_t_address(value)
             }
 
-            function convert_t_int256_to_t_int256(value) -> converted {
-                converted := cleanup_t_int256(value)
-            }
-
             function convert_t_rational_41_by_1_to_t_int256(value) -> converted {
                 converted := cleanup_t_int256(value)
             }
@@ -896,14 +760,6 @@ object \"D_72\" {
 
             function convert_t_uint160_to_t_uint160(value) -> converted {
                 converted := cleanup_t_uint160(value)
-            }
-
-            function extract_from_storage_value_dynamict_int256(slot_value, offset) -> value {
-                value := cleanup_from_storage_t_int256(shift_right_unsigned_dynamic(mul(offset, 8), slot_value))
-            }
-
-            function extract_from_storage_value_offset_0t_int256(slot_value) -> value {
-                value := cleanup_from_storage_t_int256(shift_right_0_unsigned(slot_value))
             }
 
             function finalize_allocation(memPtr, size) {
@@ -928,7 +784,7 @@ object \"D_72\" {
                 var__42 := _8
 
                 /// @src 0:392:400
-                let _9 := read_from_storage_split_offset_0_t_int256(0x00)
+                let _9 := getter_fun_stateVar_10()
                 let expr_44 := _9
                 /// @src 0:403:407
                 let expr_45_address := address()
@@ -993,16 +849,9 @@ object \"D_72\" {
             }
             /// @src 1:91:166
 
-            /// @src 0:152:171
-            function getter_fun_stateVar_10() -> ret {
-
-                let slot := 0
-                let offset := 0
-
-                ret := read_from_storage_split_dynamic_t_int256(slot, offset)
-
+            function getter_fun_stateVar_10() -> value {
+                revert(0, 0) /// WARP STUB
             }
-            /// @src 1:91:166
 
             function increment_t_int256(value) -> ret {
                 value := cleanup_t_int256(value)
@@ -1015,9 +864,9 @@ object \"D_72\" {
                 _5 := var__42
 
                 /// @src 0:322:332
-                let _7 := read_from_storage_split_offset_0_t_int256(0x00)
+                let _7 := getter_fun_stateVar_10()
                 let _6 := increment_t_int256(_7)
-                update_storage_value_offset_0t_int256_to_t_int256(0x00, _6)
+                setter_fun_stateVar_10(_6)
                 let expr_33 := _7
                 /// @src 0:336:337
                 _5 := fun_f2_53_inner(var__42)
@@ -1035,20 +884,6 @@ object \"D_72\" {
                 mstore(0, 35408467139433450592217433187231851964531694900788300625387963629091585785856)
                 mstore(4, 0x41)
                 revert(0, 0x24)
-            }
-
-            function prepare_store_t_int256(value) -> ret {
-                ret := value
-            }
-
-            function read_from_storage_split_dynamic_t_int256(slot, offset) -> value {
-                value := extract_from_storage_value_dynamict_int256(sload(slot), offset)
-
-            }
-
-            function read_from_storage_split_offset_0_t_int256(slot) -> value {
-                value := extract_from_storage_value_offset_0t_int256(sload(slot))
-
             }
 
             function revert_error_0cc013b6b3b6beabea4e3a74a6d380f0df81852ca99887912475e1f66b2a2c20() {
@@ -1081,11 +916,8 @@ object \"D_72\" {
                 result := and(add(value, 31), not(31))
             }
 
-            function shift_left_0(value) -> newValue {
-                newValue :=
-
-                shl(0, value)
-
+            function setter_fun_stateVar_10(value) {
+                revert(0, 0) /// WARP STUB
             }
 
             function shift_left_224(value) -> newValue {
@@ -1095,37 +927,11 @@ object \"D_72\" {
 
             }
 
-            function shift_right_0_unsigned(value) -> newValue {
-                newValue :=
-
-                shr(0, value)
-
-            }
-
             function shift_right_224_unsigned(value) -> newValue {
                 newValue :=
 
                 shr(224, value)
 
-            }
-
-            function shift_right_unsigned_dynamic(bits, value) -> newValue {
-                newValue :=
-
-                shr(bits, value)
-
-            }
-
-            function update_byte_slice_32_shift_0(value, toInsert) -> result {
-                let mask := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-                toInsert := shift_left_0(toInsert)
-                value := and(value, not(mask))
-                result := or(value, and(toInsert, mask))
-            }
-
-            function update_storage_value_offset_0t_int256_to_t_int256(slot, value_0) {
-                let convertedValue_0 := convert_t_int256_to_t_int256(value_0)
-                sstore(slot, update_byte_slice_32_shift_0(sload(slot), prepare_store_t_int256(convertedValue_0)))
             }
 
             function validator_revert_t_int256(value) {
