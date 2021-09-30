@@ -55,6 +55,11 @@ struct IRLValue
 				return std::get<std::string>(offset);
 		}
 	};
+	struct WarpStorage
+	{
+		VariableDeclaration const &variable;
+		std::vector<std::string> args;
+	};
 	struct Memory
 	{
 		std::string const address;
@@ -64,7 +69,7 @@ struct IRLValue
 	{
 		std::vector<std::optional<IRLValue>> components;
 	};
-	std::variant<Stack, Immutable, Storage, Memory, Tuple> kind;
+	std::variant<Stack, Immutable, Storage, WarpStorage, Memory, Tuple> kind;
 };
 
 }

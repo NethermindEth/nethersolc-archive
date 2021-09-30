@@ -861,6 +861,11 @@ MemberAccessAnnotation& MemberAccess::annotation() const
 	return initAnnotation<MemberAccessAnnotation>();
 }
 
+IndexAccessAnnotation& IndexAccess::annotation() const
+{
+	return initAnnotation<IndexAccessAnnotation>();
+}
+
 BinaryOperationAnnotation& BinaryOperation::annotation() const
 {
 	return initAnnotation<BinaryOperationAnnotation>();

@@ -22,6 +22,7 @@
 #include <libsolidity/codegen/YulUtilFunctions.h>
 
 #include <libsolidity/codegen/MultiUseYulFunctionCollector.h>
+#include <libsolidity/codegen/ir/Common.h>
 #include <libsolidity/ast/AST.h>
 #include <libsolidity/codegen/CompilerUtils.h>
 
@@ -34,6 +35,48 @@ using namespace std;
 using namespace solidity;
 using namespace solidity::util;
 using namespace solidity::frontend;
+
+string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _declaration)
+{
+	solAssert(_declaration.isStateVariable()
+			  or _declaration.referenceLocation() == VariableDeclaration::Storage,
+			  "Write functions are supported only for storage variables.");
+	string functionName = IRNames::setterFunction(_declaration);
+	return m_functionCollector.createFunction
+		(functionName,
+		 [&](vector<string> &_args, vector<string>&) {
+			 auto *type = _declaration.type();
+			 unsigned arg_no = 0;
+			 while (auto new_type = dynamic_cast<MappingType const *>(type)) {
+				 _args.emplace_back("arg" + to_string(arg_no));
+				 ++arg_no;
+				 type = new_type->valueType();
+			 }
+			 _args.emplace_back("value");
+			 return "revert(0, 0) /// WARP STUB";
+		 });
+}
+
+string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _declaration)
+{
+	solAssert(_declaration.isStateVariable()
+			  or _declaration.referenceLocation() == VariableDeclaration::Storage,
+			  "Read functions are supported only for storage variables.");
+	string functionName = IRNames::function(_declaration);
+	return m_functionCollector.createFunction
+		(functionName,
+		 [&](vector<string>& _args, vector<string>& _returnParams) {
+			 auto *type = _declaration.type();
+			 unsigned arg_no = 0;
+			 while (auto new_type = dynamic_cast<MappingType const *>(type)) {
+				 _args.emplace_back("arg" + to_string(arg_no));
+				 ++arg_no;
+				 type = new_type->valueType();
+			 }
+			 _returnParams.emplace_back("value");
+			 return "revert(0, 0) /// WARP STUB";
+		 });
+}
 
 string YulUtilFunctions::combineExternalFunctionIdFunction()
 {
