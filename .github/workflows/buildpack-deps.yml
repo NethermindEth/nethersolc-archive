@@ -2,7 +2,7 @@ name: buildpack-deps
 
 on:
   pull_request:
-    branches: [ develop ]
+    branches: [ warp/develop ]
     paths:
       - 'scripts/docker/buildpack-deps/Dockerfile.emscripten'
       - 'scripts/docker/buildpack-deps/Dockerfile.ubuntu1604.clang.ossfuzz'
