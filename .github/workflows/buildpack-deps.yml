@@ -15,7 +15,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      DOCKER_REPOSITORY: solbuildpackpusher/solidity-buildpack-deps
+      DOCKER_REPOSITORY: nethermindsolbuildpackpusher/solidity-buildpack-deps
       IMAGE_NAME: buildpack-deps
 
     runs-on: ubuntu-latest
