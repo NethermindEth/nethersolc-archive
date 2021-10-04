@@ -1,6 +1,7 @@
 name: buildpack-deps
 
 on:
+  workflow_dispatch
   pull_request:
     branches: [ warp/develop ]
     paths:
