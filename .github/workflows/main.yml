@@ -3,8 +3,8 @@ name: Build and test
 on:
   workflow_dispatch:
   push:
-    tags:
-      - '*'
+    branches: [ warp/develop ]
+  pull_request:
 
 jobs:
   build-and-test:
@@ -13,7 +13,7 @@ jobs:
       matrix:
         config:
           - os: ubuntu-latest
-          - os: macos-latest
+          - os: macos-11
 
 
     steps:
@@ -40,7 +40,7 @@ jobs:
           tar -xvzf evmone-0.8.0-darwin-x86_64.tar.gz
           cd ..
           brew install z3
-        if: matrix.config.os == 'macos-latest'
+        if: matrix.config.os == 'macos-11'
         
       - name: Build
         run: |
