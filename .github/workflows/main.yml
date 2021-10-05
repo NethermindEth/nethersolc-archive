@@ -31,7 +31,7 @@ jobs:
           tar -xvzf evmone-0.8.0-linux-x86_64.tar.gz
           cd ..
           sudo apt-get -y install libz3-4
-        if: matrix.config.os == ubuntu-latest
+        if: matrix.config.os == 'ubuntu-latest'
         
       - name: Install evmone (macos)
         run: |
@@ -40,7 +40,7 @@ jobs:
           tar -xvzf evmone-0.8.0-darwin-x86_64.tar.gz
           cd ..
           brew install z3
-        if: matrix.config.os == macos-latest
+        if: matrix.config.os == 'macos-latest'
         
       - name: Build
         run: |
