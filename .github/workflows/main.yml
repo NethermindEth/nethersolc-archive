@@ -15,7 +15,6 @@ jobs:
           - os: ubuntu-latest
           - os: macos-10.15
 
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
@@ -31,7 +30,6 @@ jobs:
           wget https://github.com/ethereum/evmone/releases/download/v0.8.0/evmone-0.8.0-linux-x86_64.tar.gz
           tar -xvzf evmone-0.8.0-linux-x86_64.tar.gz
           cd ..
-          sudo apt-get -y install libz3-4
         if: matrix.config.os == 'ubuntu-latest'
         
       - name: Install evmone (macos)
@@ -43,7 +41,21 @@ jobs:
           cd ..
           brew install z3
         if: matrix.config.os == 'macos-10.15'
+
+      - name: Gen Cache Id
+        run: |
+          echo "::set-output name=timestamp::$(date '+%s')"
+        id: cache-id
         
+      - name: Cache build
+        uses: actions/cache@v2
+        with:
+          # npm cache files are stored in `~/.npm` on Linux/macOS
+          path: build
+          key: ${{ matrix.config.os }}-build-${{ steps.cache-id.outputs.timestamp }}
+          restore-keys: |
+            ${{ matrix.conig.os }}-build-
+            
       - name: Build
         run: |
           mkdir build
