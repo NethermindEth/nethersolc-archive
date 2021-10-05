@@ -1,0 +1,53 @@
+name: Build and test
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+          - os: ubuntu-latest
+          - os: macos-latest
+
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+        
+      - name: Install dependencies
+        run: | 
+          ./scripts/install_deps.sh
+          
+      - name: Install evmone (linux)
+        run: |
+          cd deps
+          wget https://github.com/ethereum/evmone/releases/download/v0.8.0/evmone-0.8.0-linux-x86_64.tar.gz
+          tar -xvzf evmone-0.8.0-linux-x86_64.tar.gz
+          cd ..
+          sudo apt-get -y install libz3-4
+        if: matrix.config.os == ubuntu-latest
+        
+      - name: Install evmone (macos)
+        run: |
+          cd deps
+          wget https://github.com/ethereum/evmone/releases/download/v0.8.0/evmone-0.8.0-darwin-x86_64.tar.gz
+          tar -xvzf evmone-0.8.0-darwin-x86_64.tar.gz
+          cd ..
+          brew install z3
+        if: matrix.config.os == macos-latest
+        
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          cmake .. && make
+        
+      - name: Test
+        run: |
+          ./scripts/tests.sh
