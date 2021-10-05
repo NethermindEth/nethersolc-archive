@@ -26,6 +26,7 @@ jobs:
           
       - name: Install evmone (linux)
         run: |
+          mkdir -p deps
           cd deps
           wget https://github.com/ethereum/evmone/releases/download/v0.8.0/evmone-0.8.0-linux-x86_64.tar.gz
           tar -xvzf evmone-0.8.0-linux-x86_64.tar.gz
@@ -35,6 +36,7 @@ jobs:
         
       - name: Install evmone (macos)
         run: |
+          mkdir -p deps
           cd deps
           wget https://github.com/ethereum/evmone/releases/download/v0.8.0/evmone-0.8.0-darwin-x86_64.tar.gz
           tar -xvzf evmone-0.8.0-darwin-x86_64.tar.gz
