@@ -13,7 +13,7 @@ jobs:
       matrix:
         config:
           - os: ubuntu-latest
-          - os: macos-11
+          - os: macos-10.15
 
 
     steps:
@@ -40,7 +40,7 @@ jobs:
           tar -xvzf evmone-0.8.0-darwin-x86_64.tar.gz
           cd ..
           brew install z3
-        if: matrix.config.os == 'macos-11'
+        if: matrix.config.os == 'macos-10.15'
         
       - name: Build
         run: |
