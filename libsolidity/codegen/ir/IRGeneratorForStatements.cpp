@@ -1633,7 +1633,6 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 				solAssert(false, "Contract member is neither variable nor function.");
 
 			define(IRVariable(_memberAccess).part("address"), _memberAccess.expression());
-			define(IRVariable(_memberAccess).part("functionSelector")) << formatNumber(identifier) << "\n";
 		}
 		else
 			solAssert(false, "Invalid member access in contract");
@@ -2377,11 +2376,15 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 
 	solAssert(
 		funKind == FunctionType::Kind::External || funKind == FunctionType::Kind::DelegateCall,
-		"Can only be used for regular external calls."
-	);
+		"Can only be used for regular external calls.");
+	solAssert(funKind != FunctionType::Kind::DelegateCall, "WARP: Delegate calls are not supported yet");
 
-	bool const isDelegateCall = funKind == FunctionType::Kind::DelegateCall;
-	bool const useStaticCall = funType.stateMutability() <= StateMutability::View && m_context.evmVersion().hasStaticCall();
+	auto const& memberAccess = dynamic_cast<MemberAccess const&>(_functionCall.expression());
+	auto const* contractType = dynamic_cast<ContractType const*>(memberAccess.expression().annotation().type);
+	auto const& contractDefinition = contractType->contractDefinition();
+
+	string contractName = contractDefinition.name();
+	string functionName = memberAccess.memberName();
 
 	ReturnInfo const returnInfo{m_context.evmVersion(), funType};
 
@@ -2401,109 +2404,17 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 		argumentStrings += IRVariable(*arg).stackSlots();
 	}
 
-
-	if (!m_context.evmVersion().canOverchargeGasForCall())
-	{
-		// Touch the end of the output area so that we do not pay for memory resize during the call
-		// (which we would have to subtract from the gas left)
-		// We could also just use MLOAD; POP right before the gas calculation, but the optimizer
-		// would remove that, so we use MSTORE here.
-		if (!funType.gasSet() && returnInfo.estimatedReturnSize > 0)
-			appendCode() << "mstore(add(" << m_utils.allocateUnboundedFunction() << "() , " << to_string(returnInfo.estimatedReturnSize) << "), 0)\n";
-	}
-
-	Whiskers templ(R"(if iszero(extcodesize(<address>)) { <revertNoCode>() }
-
-		// storage for arguments and returned data
-		let <pos> := <allocateUnbounded>()
-		mstore(<pos>, <shl28>(<funSel>))
-		let <end> := <encodeArgs>(add(<pos>, 4) <argumentString>)
-
-		let <success> := <call>(<gas>, <address>, <?hasValue> <value>, </hasValue> <pos>, sub(<end>, <pos>), <pos>, <reservedReturnSize>)
-		<?noTryCall>
-			if iszero(<success>) { <forwardingRevert>() }
-		</noTryCall>
-		<?+retVars> let <retVars> </+retVars>
-		if <success> {
-			<?dynamicReturnSize>
-				// copy dynamic return data out
-				returndatacopy(<pos>, 0, returndatasize())
-			</dynamicReturnSize>
-
-			// update freeMemoryPointer according to dynamic return size
-			<finalizeAllocation>(<pos>, <returnSize>)
-
-			// decode return parameters from external try-call into retVars
-			<?+retVars> <retVars> := </+retVars> <abiDecode>(<pos>, add(<pos>, <returnSize>))
-		}
-	)");
-	templ("revertNoCode", m_utils.revertReasonIfDebugFunction("Target contract does not contain code"));
-	templ("pos", m_context.newYulVariable());
-	templ("end", m_context.newYulVariable());
-	if (_functionCall.annotation().tryCall)
-		templ("success", IRNames::trySuccessConditionVariable(_functionCall));
-	else
-		templ("success", m_context.newYulVariable());
-	templ("allocateUnbounded", m_utils.allocateUnboundedFunction());
-	templ("finalizeAllocation", m_utils.finalizeAllocationFunction());
-	templ("shl28", m_utils.shiftLeftFunction(8 * (32 - 4)));
-
-	templ("funSel", IRVariable(_functionCall.expression()).part("functionSelector").name());
-	templ("address", IRVariable(_functionCall.expression()).part("address").name());
-
-	// Always use the actual return length, and not our calculated expected length, if returndatacopy is supported.
-	// This ensures it can catch badly formatted input from external calls.
-	if (m_context.evmVersion().supportsReturndata())
-		templ("returnSize", "returndatasize()");
-	else
-		templ("returnSize", to_string(returnInfo.estimatedReturnSize));
-
-	templ("reservedReturnSize", returnInfo.dynamicReturnSize ? "0" : to_string(returnInfo.estimatedReturnSize));
-
+	Whiskers templ(R"(
+	<?+retVars> let <retVars> :=</+retVars> <contractCall>(<address><argumentString>)
+    )");
 	string const retVars = IRVariable(_functionCall).commaSeparatedList();
 	templ("retVars", retVars);
 	solAssert(retVars.empty() == returnInfo.returnTypes.empty(), "");
-
-	templ("abiDecode", m_context.abiFunctions().tupleDecoder(returnInfo.returnTypes, true));
-	templ("dynamicReturnSize", returnInfo.dynamicReturnSize);
-
-	templ("noTryCall", !_functionCall.annotation().tryCall);
-
-	bool encodeForLibraryCall = funKind == FunctionType::Kind::DelegateCall;
-
-	solAssert(funType.padArguments(), "");
-	templ("encodeArgs", m_context.abiFunctions().tupleEncoder(argumentTypes, parameterTypes, encodeForLibraryCall));
+	templ(
+		"contractCall",
+		m_utils.contractCallFunction(contractName, functionName, argumentTypes, returnInfo.returnTypes));
+	templ("address", IRVariable{_functionCall.expression()}.part("address").name());
 	templ("argumentString", joinHumanReadablePrefixed(argumentStrings));
-
-	solAssert(!isDelegateCall || !funType.valueSet(), "Value set for delegatecall");
-	solAssert(!useStaticCall || !funType.valueSet(), "Value set for staticcall");
-
-	templ("hasValue", !isDelegateCall && !useStaticCall);
-	templ("value", funType.valueSet() ? IRVariable(_functionCall.expression()).part("value").name() : "0");
-
-	if (funType.gasSet())
-		templ("gas", IRVariable(_functionCall.expression()).part("gas").name());
-	else if (m_context.evmVersion().canOverchargeGasForCall())
-		// Send all gas (requires tangerine whistle EVM)
-		templ("gas", "gas()");
-	else
-	{
-		// send all gas except the amount needed to execute "SUB" and "CALL"
-		// @todo this retains too much gas for now, needs to be fine-tuned.
-		u256 gasNeededByCaller = evmasm::GasCosts::callGas(m_context.evmVersion()) + 10;
-		if (funType.valueSet())
-			gasNeededByCaller += evmasm::GasCosts::callValueTransferGas;
-		templ("gas", "sub(gas(), " + formatNumber(gasNeededByCaller) + ")");
-	}
-	// Order is important here, STATICCALL might overlap with DELEGATECALL.
-	if (isDelegateCall)
-		templ("call", "delegatecall");
-	else if (useStaticCall)
-		templ("call", "staticcall");
-	else
-		templ("call", "call");
-
-	templ("forwardingRevert", m_utils.forwardingRevertFunction());
 
 	appendCode() << templ.render();
 }
