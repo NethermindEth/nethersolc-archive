@@ -531,6 +531,7 @@ public:
 	std::string externalCodeFunction();
 
 private:
+	int m_storageGenCount = 0;
 /// @returns the name of a function that copies a struct from calldata or memory to storage
 	/// signature: (slot, value) ->
 	std::string copyStructToStorageFunction(StructType const& _from, StructType const& _to);
