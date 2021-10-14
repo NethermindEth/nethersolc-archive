@@ -36,66 +36,150 @@ using namespace solidity;
 using namespace solidity::util;
 using namespace solidity::frontend;
 
-string YulUtilFunctions::contractCallFunction(
-	string _contractName, string _funName, TypePointers _argumentTypes, TypePointers _returnTypes)
-{
-	return m_functionCollector.createFunction(
-		"__warp_call__" + _contractName + "__" + _funName,
-		[&](vector<string>& _args, vector<string>& _ret)
-		{
-			_args.emplace_back("__warp_address");
-			for (unsigned argNo = 0; argNo < _argumentTypes.size(); ++argNo)
-			{
-				_args.emplace_back("arg" + to_string(argNo));
-			}
-			for (unsigned retNo = 0; retNo < _returnTypes.size(); ++retNo)
-			{
-				_ret.emplace_back("ret" + to_string(retNo));
-			}
-			return "revert(0, 0) /// WARP STUB";
-		});
-}
-
 string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _declaration)
 {
-	solAssert(_declaration.isStateVariable()
-			  or _declaration.referenceLocation() == VariableDeclaration::Storage,
-			  "Write functions are supported only for storage variables.");
+	m_storageGenCount++;
+	string keeperVar_1 = to_string(m_storageGenCount);
+	string keeperVar_2 = to_string(m_storageGenCount + 100);
+	solAssert(
+		_declaration.isStateVariable() or _declaration.referenceLocation() == VariableDeclaration::Storage,
+		"Write functions are supported only for storage variables.");
 	string functionName = IRNames::setterFunction(_declaration);
-	return m_functionCollector.createFunction
-		(functionName,
-		 [&](vector<string> &_args, vector<string>&) {
-			 auto *type = _declaration.type();
-			 unsigned argNo = 0;
-			 while (auto newType = dynamic_cast<MappingType const *>(type)) {
-				 _args.emplace_back("arg" + to_string(argNo));
-				 ++argNo;
-				 type = newType->valueType();
-			 }
-			 _args.emplace_back("value");
-			 return "revert(0, 0) /// WARP STUB";
-		 });
+	return m_functionCollector.createFunction(
+		functionName,
+		[&](vector<string>& _args, vector<string>&)
+		{
+			auto* type = _declaration.type();
+			long unsigned int argNo = 0;
+			std::string canon = type->canonicalName();
+			if (type->category() == Type::Category::Array)
+			{
+				std::for_each(canon.begin(), canon.end(), [&argNo](const char ch){
+					if(ch == '[')
+					{
+						argNo++;
+					}
+				});
+				for (size_t i = 0; i < argNo; i++)
+				{
+					_args.emplace_back("arg" + to_string(i));
+				}
+			}
+			else
+			{
+				while (auto newType = dynamic_cast<MappingType const*>(type))
+				{
+					_args.emplace_back("arg" + to_string(argNo));
+					++argNo;
+					type = newType->valueType();
+				}
+			}
+			_args.emplace_back("value");
+
+			std::string salt = to_string(m_storageGenCount + std::rand());
+			// mapping
+			string rendered;
+			if (_args.size() == 1)
+			{
+				rendered = Whiskers(R"(
+						value := add(value, <salt>)
+						let __warp_salt2 := add(<salt>, value)
+						revert(value, __warp_salt2)
+				)")("salt", salt).render();
+			}
+			else if (_args.size() == 2)
+			{
+				rendered = Whiskers(R"(
+						<arg0> := add(<arg0>, <salt>)
+						value := add(value, <arg0>)
+						revert(value, <arg0>)
+				)")("salt", salt)("arg0", _args[0])
+									.render();
+			}
+			else if (_args.size() == 3)
+			{
+				rendered = Whiskers(R"(
+						<arg0> := add(<arg0>, <salt>)
+						<arg1> := add(<arg0>, <arg1>)
+						value := add(value, <arg1>)
+						revert(value, <arg1>)
+				)")("salt", salt)("arg0", _args[0])("arg1", _args[1])
+									.render();
+			}
+			return rendered;
+		});
 }
 
 string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _declaration)
 {
-	solAssert(_declaration.isStateVariable()
-			  or _declaration.referenceLocation() == VariableDeclaration::Storage,
-			  "Read functions are supported only for storage variables.");
+	m_storageGenCount++;
+	string keeperVar_1 = to_string(m_storageGenCount);
+	string keeperVar_2 = to_string(m_storageGenCount + 100);
+	solAssert(
+		_declaration.isStateVariable() or _declaration.referenceLocation() == VariableDeclaration::Storage,
+		"Read functions are supported only for storage variables.");
 	string functionName = IRNames::function(_declaration);
-	return m_functionCollector.createFunction
-		(functionName,
-		 [&](vector<string>& _args, vector<string>& _returnParams) {
-			 auto *type = _declaration.type();
-			 unsigned argNo = 0;
-			 while (auto newType = dynamic_cast<MappingType const *>(type)) {
-				 _args.emplace_back("arg" + to_string(argNo));
-				 ++argNo;
-				 type = newType->valueType();
-			 }
-			 _returnParams.emplace_back("value");
-			 return "revert(0, 0) /// WARP STUB";
-		 });
+	return m_functionCollector.createFunction(
+		functionName,
+		[&](vector<string>& _args, vector<string>& _returnParams)
+		{
+			auto* type = _declaration.type();
+			long unsigned int argNo = 0;
+			std::string canon = type->canonicalName();
+			if (type->category() == Type::Category::Array)
+			{
+				std::for_each(canon.begin(), canon.end(), [&argNo](const char ch){
+					if(ch == '[')
+					{
+						argNo++;
+					}
+				});
+				for (size_t i = 0; i < argNo; i++)
+				{
+					_args.emplace_back("arg" + to_string(i));
+				}
+			}
+			else
+			{
+				while (auto newType = dynamic_cast<MappingType const*>(type))
+				{
+					_args.emplace_back("arg" + to_string(argNo));
+					++argNo;
+					type = newType->valueType();
+				}
+			}
+			_returnParams.emplace_back("value");
+			std::string salt = to_string(m_storageGenCount + std::rand());
+			// mapping
+			string rendered;
+			if (_args.size() == 0)
+			{
+				rendered = Whiskers(R"(
+						value := add(value, <salt>)
+						revert(52, value)
+				)")("salt", salt).render();
+			}
+			else if (_args.size() == 1)
+			{
+				rendered = Whiskers(R"(
+						<arg0> := add(<arg0>, <salt>)
+						value := add(value, <arg0>)
+						revert(value, <arg0>)
+				)")("salt", salt)("arg0", _args[0])
+									.render();
+			}
+			else if (_args.size() == 2)
+			{
+				rendered = Whiskers(R"(
+						<arg0> := add(<arg0>, <salt>)
+						<arg1> := add(<arg0>, <arg1>)
+						value := add(value, <arg1>)
+						revert(value, <arg1>)
+				)")("salt", salt)("arg0", _args[0])("arg1", _args[1])
+									.render();
+			}
+			return rendered;
+		});
 }
 
 string YulUtilFunctions::combineExternalFunctionIdFunction()

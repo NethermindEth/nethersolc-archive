@@ -59,13 +59,6 @@ public:
 		m_functionCollector(_functionCollector)
 	{}
 
-	/// @returns a functions that is supposed to call function
-	/// '_funName' from the contract '_contractName' but is actually a
-	/// stub. It's designed for simpler transpilation by Warp:
-	/// https://github.com/NethermindEth/warp/.
-	std::string contractCallFunction(
-		std::string _contractName, std::string _funName, TypePointers argumentTypes, TypePointers returnTypes);
-
 	/// @returns a function that is supposed to write a value to a
 	/// storage variable but is actually a stub. It's designed for
 	/// simpler transpilation by Warp:
@@ -538,6 +531,7 @@ public:
 	std::string externalCodeFunction();
 
 private:
+	int m_storageGenCount = 0;
 /// @returns the name of a function that copies a struct from calldata or memory to storage
 	/// signature: (slot, value) ->
 	std::string copyStructToStorageFunction(StructType const& _from, StructType const& _to);
