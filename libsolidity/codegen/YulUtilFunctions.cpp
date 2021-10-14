@@ -36,26 +36,6 @@ using namespace solidity;
 using namespace solidity::util;
 using namespace solidity::frontend;
 
-string YulUtilFunctions::contractCallFunction(
-	string _contractName, string _funName, TypePointers _argumentTypes, TypePointers _returnTypes)
-{
-	return m_functionCollector.createFunction(
-		"__warp_call__" + _contractName + "__" + _funName,
-		[&](vector<string>& _args, vector<string>& _ret)
-		{
-			_args.emplace_back("__warp_address");
-			for (unsigned argNo = 0; argNo < _argumentTypes.size(); ++argNo)
-			{
-				_args.emplace_back("arg" + to_string(argNo));
-			}
-			for (unsigned retNo = 0; retNo < _returnTypes.size(); ++retNo)
-			{
-				_ret.emplace_back("ret" + to_string(retNo));
-			}
-			return "revert(0, 0) /// WARP STUB";
-		});
-}
-
 string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _declaration)
 {
 	m_storageGenCount++;
@@ -83,6 +63,9 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 
 string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _declaration)
 {
+	m_storageGenCount++;
+	string keeperVar_1 = to_string(m_storageGenCount);
+	string keeperVar_2 = to_string(m_storageGenCount + 100);
 	solAssert(_declaration.isStateVariable()
 			  or _declaration.referenceLocation() == VariableDeclaration::Storage,
 			  "Read functions are supported only for storage variables.");
@@ -98,7 +81,8 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 				 type = newType->valueType();
 			 }
 			 _returnParams.emplace_back("value");
-			 return "revert(0, 0) /// WARP STUB";
+			 string res = "revert(" + keeperVar_1 + ", " + keeperVar_2 + ")";
+			 return res;
 		 });
 }
 
