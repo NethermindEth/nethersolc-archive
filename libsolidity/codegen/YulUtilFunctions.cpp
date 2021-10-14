@@ -56,7 +56,12 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 				 type = newType->valueType();
 			 }
 			 _args.emplace_back("value");
-			 string res = "revert(" + keeperVar_1 + ", " + keeperVar_2 + ")";
+			 std::string res;
+			 for (auto arg : _args)
+			 {
+				 res += arg + " += 42\n";
+			 }
+			 res += "revert(" + keeperVar_1 + ", " + keeperVar_2 + ")";
 			 return res;
 		 });
 }
@@ -81,7 +86,12 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 				 type = newType->valueType();
 			 }
 			 _returnParams.emplace_back("value");
-			 string res = "revert(" + keeperVar_1 + ", " + keeperVar_2 + ")";
+			 std::string res;
+			 for (auto arg : _args)
+			 {
+				 res += arg + " += 42\n";
+			 }
+			 res += "revert(" + keeperVar_1 + ", " + keeperVar_2 + ")";
 			 return res;
 		 });
 }
