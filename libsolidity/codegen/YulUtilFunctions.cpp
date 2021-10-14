@@ -58,6 +58,9 @@ string YulUtilFunctions::contractCallFunction(
 
 string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _declaration)
 {
+	m_storageGenCount++;
+	string keeperVar_1 = to_string(m_storageGenCount);
+	string keeperVar_2 = to_string(m_storageGenCount + 100);
 	solAssert(_declaration.isStateVariable()
 			  or _declaration.referenceLocation() == VariableDeclaration::Storage,
 			  "Write functions are supported only for storage variables.");
@@ -73,7 +76,8 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 				 type = newType->valueType();
 			 }
 			 _args.emplace_back("value");
-			 return "revert(0, 0) /// WARP STUB";
+			 string res = "revert(" + keeperVar_1 + ", " + keeperVar_2 + ")";
+			 return res;
 		 });
 }
 
