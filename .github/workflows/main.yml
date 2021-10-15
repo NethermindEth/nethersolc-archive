@@ -30,6 +30,7 @@ jobs:
           wget https://github.com/ethereum/evmone/releases/download/v0.8.0/evmone-0.8.0-linux-x86_64.tar.gz
           tar -xvzf evmone-0.8.0-linux-x86_64.tar.gz
           cd ..
+          sudo apt-get -y install cvc4 z3
         if: matrix.config.os == 'ubuntu-latest'
         
       - name: Install evmone (macos)
@@ -39,6 +40,9 @@ jobs:
           wget https://github.com/ethereum/evmone/releases/download/v0.8.0/evmone-0.8.0-darwin-x86_64.tar.gz
           tar -xvzf evmone-0.8.0-darwin-x86_64.tar.gz
           cd ..
+          brew install z3
+          brew tap cvc4/cvc4
+          brew install cvc4/cvc4/cvc4
         if: matrix.config.os == 'macos-10.15'
 
       - name: Gen Cache Id
@@ -63,4 +67,4 @@ jobs:
         
       - name: Test
         run: |
-          TERM=dumb SMT_FLAGS=--no-smt ./scripts/tests.sh
+          TERM=dumb ./scripts/tests.sh
