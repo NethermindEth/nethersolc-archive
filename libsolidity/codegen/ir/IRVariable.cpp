@@ -95,6 +95,7 @@ string IRVariable::name() const
 {
 	solAssert(m_type.sizeOnStack() == 1, "");
 	auto const& [itemName, type] = m_type.stackItems().front();
+	std::cout << type->identifier() << std::endl;
 	solAssert(!type, "Expected null type for name " + itemName);
 	return suffixedName(itemName);
 }
