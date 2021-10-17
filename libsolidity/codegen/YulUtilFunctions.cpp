@@ -130,6 +130,7 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 					revert(<arg0>, 5125)
 			 )")("body", body)("arg0", to_string(m_storageGenCount + std::rand()))
 								  .render();
+			std::cout << rendered << std::endl;
 			return rendered;
 		});
 }
