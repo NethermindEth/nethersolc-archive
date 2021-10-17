@@ -108,11 +108,15 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 				++argNo;
 				type = newType->valueType();
 			}
+			if (_args.size() > 1)
+				throw std::runtime_error("We do not support nested mappings yet");
 			_returnParams.emplace_back("value");
 			std::string body;
 			std::string argsForSig;
+			std::string lastArg;
 			for (size_t i = 0; i < _args.size(); ++i)
 			{
+				string holdName = _args[i] + "_hold" + to_string(i);
 				if (i == _args.size() - 1)
 				{
 					argsForSig += _args[i];
@@ -121,14 +125,18 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 				{
 					argsForSig += _args[i] + ", ";
 				}
-				body += "let " + _args[i] + "_hold" + to_string(i) + " := " + "add(" + _args[i] + ", "  
+				body += "let " + holdName + " := " + "add(" + _args[i] + ", "  
 						+ to_string(m_storageGenCount) +")" + "\n";
+				body += _args[i] + ":= add(" + _args[i] + ", " + holdName + ")";
+				lastArg = _args[i];
 			}
+			if (_args.size() == 0)
+				lastArg = std::to_string(m_storageGenCount + std::rand());
 			string rendered = Whiskers(R"(
 					 <body>
 					 value := <arg0>
-					revert(<arg0>, 5125)
-			 )")("body", body)("arg0", to_string(m_storageGenCount + std::rand()))
+					revert(value, 5125)
+			 )")("body", body)("arg0", lastArg)
 								  .render();
 			return rendered;
 		});
