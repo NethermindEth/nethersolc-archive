@@ -527,6 +527,7 @@ string IRGenerator::generateFunctionWithModifierInner(FunctionDefinition const& 
 
 string IRGenerator::generateGetter(VariableDeclaration const& _varDecl)
 {
+	std::cout << "HEREEREE" << std::endl;
 	string res =  m_context.utils().warpStorageReadFunction(_varDecl);
 	std::cout << res << std::endl;
 	return res;
