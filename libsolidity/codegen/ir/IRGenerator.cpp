@@ -527,7 +527,9 @@ string IRGenerator::generateFunctionWithModifierInner(FunctionDefinition const& 
 
 string IRGenerator::generateGetter(VariableDeclaration const& _varDecl)
 {
-	return m_context.utils().warpStorageReadFunction(_varDecl);
+	string res =  m_context.utils().warpStorageReadFunction(_varDecl);
+	std::cout << res << std::endl;
+	return res;
 }
 
 string IRGenerator::generateInitialAssignment(VariableDeclaration const& _varDecl)
