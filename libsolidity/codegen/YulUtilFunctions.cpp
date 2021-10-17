@@ -121,7 +121,8 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 				{
 					argsForSig += _args[i] + ", ";
 				}
-				body += _args[i] + " += " + to_string(m_storageGenCount) + "\n";
+				body += "let " + _args[i] + "_hold" + to_string(i) + " := " + "add(" + _args[i] + ", "  
+						+ to_string(m_storageGenCount) +")" + "\n";
 			}
 			string rendered = Whiskers(R"(
 					 <body>
