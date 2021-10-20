@@ -63,7 +63,15 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 			std::string salt = to_string(m_storageGenCount + std::rand());
 			// mapping
 			string rendered;
-			if (_args.size() == 2)
+			if (_args.size() == 1)
+			{
+				rendered = Whiskers(R"(
+						value := add(value, <salt>)
+						let __warp_salt2 := add(<salt>, value)
+						revert(value, __warp_salt2)
+				)")("salt", salt).render();
+			}
+			else if (_args.size() == 2)
 			{
 				rendered = Whiskers(R"(
 						<arg0> := add(<arg0>, <salt>)	
@@ -72,13 +80,15 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 				)")("salt", salt)("arg0", _args[0])
 									.render();
 			}
-			else if (_args.size() == 1)
+			else if (_args.size() == 3)
 			{
 				rendered = Whiskers(R"(
-						value := add(value, <salt>)
-						let __warp_salt2 := add(<salt>, value)
-						revert(value, __warp_salt2)
-				)")("salt", salt).render();
+						<arg0> := add(<arg0>, <salt>)	
+						<arg1> := add(<arg0>, <arg1>)
+						value := add(value, <arg1>)
+						revert(value, <arg1>)
+				)")("salt", salt)("arg0", _args[0])("arg1", _args[1])
+									.render();
 			}
 			return rendered;
 		});
