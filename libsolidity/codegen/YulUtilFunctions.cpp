@@ -126,7 +126,7 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 						let value := add(<salt2>, <salt>)
 						let __warp_salt2 := add(<salt2>, value)
 						revert(value, __warp_salt2)
-				)")("salt", salt).render();
+				)")("salt", salt)("salt2", salt2).render();
 			}
 			else if (_args.size() == 1)
 			{
@@ -142,7 +142,7 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 						<arg0> := add(<arg0>, <salt>)	
 						<arg1> := add(<arg0>, <arg1>)
 						revert(<arg0>, <arg1>)
-				)")("salt", salt)("arg0", _args[0])("arg1", _args[1])
+				)")("arg0", _args[0])("arg1", _args[1])
 									.render();
 			}	
 			return rendered;
