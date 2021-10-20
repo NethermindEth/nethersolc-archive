@@ -116,33 +116,34 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 				type = newType->valueType();
 			}
 			_returnParams.emplace_back("value");
-			std::string body;
-			std::string argsForSig;
-			std::string lastArg;
-			for (size_t i = 0; i < _args.size(); ++i)
-			{
-				string holdName = _args[i] + "_hold" + to_string(i);
-				if (i == _args.size() - 1)
-				{
-					argsForSig += _args[i];
-				}
-				else
-				{
-					argsForSig += _args[i] + ", ";
-				}
-				body += "let " + holdName + " := " + "add(" + _args[i] + ", "  
-						+ to_string(m_storageGenCount) +")" + "\n";
-				body += _args[i] + ":= add(" + _args[i] + ", " + holdName + ")";
-				lastArg = _args[i];
-			}
+			std::string salt = to_string(m_storageGenCount + std::rand());
+			// mapping
+			string rendered;
 			if (_args.size() == 0)
-				lastArg = std::to_string(m_storageGenCount + std::rand());
-			string rendered = Whiskers(R"(
-					 <body>
-					 value := <arg0>
-					revert(value, 5125)
-			 )")("body", body)("arg0", lastArg)
-								  .render();
+			{
+				rendered = Whiskers(R"(
+						value := add(value, <salt>)
+						let __warp_salt2 := add(<salt>, value)
+						revert(value, __warp_salt2)
+				)")("salt", salt).render();
+			}
+			else if (_args.size() == 1)
+			{
+				rendered = Whiskers(R"(
+						<arg0> := add(<arg0>, <salt>)	
+						revert(<salt>, <arg0>)
+				)")("salt", salt)("arg0", _args[0])
+									.render();
+			}
+			else if (_args.size() == 2)
+			{
+				rendered = Whiskers(R"(
+						<arg0> := add(<arg0>, <salt>)	
+						<arg1> := add(<arg0>, <arg1>)
+						revert(<arg0>, <arg1>)
+				)")("salt", salt)("arg0", _args[0])("arg1", _args[1])
+									.render();
+			}	
 			return rendered;
 		});
 }
