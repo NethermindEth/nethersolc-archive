@@ -117,13 +117,14 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 			}
 			_returnParams.emplace_back("value");
 			std::string salt = to_string(m_storageGenCount + std::rand());
+			std::string salt2 = to_string(m_storageGenCount + std::rand());
 			// mapping
 			string rendered;
 			if (_args.size() == 0)
 			{
 				rendered = Whiskers(R"(
-						value := add(value, <salt>)
-						let __warp_salt2 := add(<salt>, value)
+						let value := add(<salt2>, <salt>)
+						let __warp_salt2 := add(<salt2>, value)
 						revert(value, __warp_salt2)
 				)")("salt", salt).render();
 			}
