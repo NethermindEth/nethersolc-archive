@@ -59,30 +59,53 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 				type = newType->valueType();
 			}
 			_args.emplace_back("value");
-			std::string body;
-			std::string argsForSig;
-			std::string holdName;
-			for (size_t i = 0; i < _args.size(); ++i)
+
+			std::string salt = to_string(m_storageGenCount + std::rand());
+			// mapping
+			string rendered;
+			if (_args.size() == 2)
 			{
-				if (i == _args.size() - 1)
-				{
-					argsForSig += _args[i];
-				}
-				else
-				{
-					argsForSig += _args[i] + ", ";
-				}
-				holdName = 	 _args[i] + "_hold" + to_string(i);
-				body += "let " + _args[i] + "_hold" + to_string(i) + " := " + "add(" + _args[i] + ", "  
-						+ to_string(m_storageGenCount) +")" + "\n";
+				rendered = Whiskers(R"(
+						<arg0> := add(<arg0>, <salt>)	
+						value := add(value, <arg0>)
+						revert(value, <arg0>)
+				)")("salt", salt)("arg0", _args[0])
+									.render();
 			}
-			string revertStmt
-				= "revert(" + holdName + ", " + to_string(m_storageGenCount + 32) + ")";
-			string rendered = Whiskers(R"(
-					 <body>
-					 <revert>
-			 )")("body", body)("revert", revertStmt)
-								  .render();
+			else if (_args.size() == 1)
+			{
+				rendered = Whiskers(R"(
+						value := add(value, <salt>)
+						let __warp_salt2 := add(<salt>, value)
+						revert(value, __warp_salt2)
+				)")("salt", salt).render();
+			}
+
+			// std::string body;
+			// std::string argsForSig;
+			// std::string holdName;
+			// for (size_t i = 0; i < _args.size(); ++i)
+			// {
+			// 	if (i == _args.size() - 1)
+			// 	{
+			// 		argsForSig += _args[i];
+			// 	}
+			// 	else
+			// 	{
+			// 		argsForSig += _args[i] + ", ";
+			// 	}
+			// 	holdName = 	 _args[i] + "_hold" + to_string(i);
+			// 	body += "let " + _args[i] + "_hold" + to_string(i) + " := " + "add(" + _args[i] + ", "  
+			// 			+ to_string(m_storageGenCount) +")" + "\n";
+			// }
+			// string revertStmt
+			// 	= "revert(" + holdName + ", " + to_string(m_storageGenCount + 32) + ")";
+			// string rendered = Whiskers(R"(
+			// 		 <body>
+			// 		 <revert>
+			//  )")("body", body)("revert", revertStmt)
+			// 					  .render();
+			std::cout << rendered << std::endl;
 			return rendered;
 		});
 }
