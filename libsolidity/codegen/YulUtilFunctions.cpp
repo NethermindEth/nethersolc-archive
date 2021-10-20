@@ -105,8 +105,6 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 				++argNo;
 				type = newType->valueType();
 			}
-			if (_args.size() > 1)
-				throw std::runtime_error("We do not support nested mappings yet");
 			_returnParams.emplace_back("value");
 			std::string body;
 			std::string argsForSig;
