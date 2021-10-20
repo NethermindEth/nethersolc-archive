@@ -80,32 +80,6 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 						revert(value, __warp_salt2)
 				)")("salt", salt).render();
 			}
-
-			// std::string body;
-			// std::string argsForSig;
-			// std::string holdName;
-			// for (size_t i = 0; i < _args.size(); ++i)
-			// {
-			// 	if (i == _args.size() - 1)
-			// 	{
-			// 		argsForSig += _args[i];
-			// 	}
-			// 	else
-			// 	{
-			// 		argsForSig += _args[i] + ", ";
-			// 	}
-			// 	holdName = 	 _args[i] + "_hold" + to_string(i);
-			// 	body += "let " + _args[i] + "_hold" + to_string(i) + " := " + "add(" + _args[i] + ", "  
-			// 			+ to_string(m_storageGenCount) +")" + "\n";
-			// }
-			// string revertStmt
-			// 	= "revert(" + holdName + ", " + to_string(m_storageGenCount + 32) + ")";
-			// string rendered = Whiskers(R"(
-			// 		 <body>
-			// 		 <revert>
-			//  )")("body", body)("revert", revertStmt)
-			// 					  .render();
-			std::cout << rendered << std::endl;
 			return rendered;
 		});
 }
