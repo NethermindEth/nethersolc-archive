@@ -32,6 +32,7 @@
 #include <libyul/optimiser/DeadCodeEliminator.h>
 #include <libyul/optimiser/FunctionGrouper.h>
 #include <libyul/optimiser/FunctionHoister.h>
+#include <libyul/optimiser/FunctionSpecializer.h>
 #include <libyul/optimiser/EquivalentFunctionCombiner.h>
 #include <libyul/optimiser/ExpressionSplitter.h>
 #include <libyul/optimiser/ExpressionJoiner.h>
@@ -194,6 +195,7 @@ map<string, unique_ptr<OptimiserStep>> const& OptimiserSuite::allSteps()
 			FullInliner,
 			FunctionGrouper,
 			FunctionHoister,
+			FunctionSpecializer,
 			LiteralRematerialiser,
 			LoadResolver,
 			LoopInvariantCodeMotion,
@@ -233,6 +235,7 @@ map<string, char> const& OptimiserSuite::stepNameToAbbreviationMap()
 		{FullInliner::name,                   'i'},
 		{FunctionGrouper::name,               'g'},
 		{FunctionHoister::name,               'h'},
+		{FunctionSpecializer::name,           'F'},
 		{LiteralRematerialiser::name,         'T'},
 		{LoadResolver::name,                  'L'},
 		{LoopInvariantCodeMotion::name,       'M'},
