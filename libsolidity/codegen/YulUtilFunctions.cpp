@@ -51,12 +51,29 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 		[&](vector<string>& _args, vector<string>&)
 		{
 			auto* type = _declaration.type();
-			unsigned argNo = 0;
-			while (auto newType = dynamic_cast<MappingType const*>(type))
+			long unsigned int argNo = 0;
+			std::string canon = type->canonicalName();
+			if (type->category() == Type::Category::Array)
 			{
-				_args.emplace_back("arg" + to_string(argNo));
-				++argNo;
-				type = newType->valueType();
+				std::for_each(canon.begin(), canon.end(), [&argNo](const char ch){
+					if(ch == '[') 
+					{
+						argNo++;
+					}
+				});
+				for (size_t i = 0; i < argNo; i++)
+				{
+					_args.emplace_back("arg" + to_string(i));
+				}
+			}
+			else
+			{		
+				while (auto newType = dynamic_cast<MappingType const*>(type))
+				{
+					_args.emplace_back("arg" + to_string(argNo));
+					++argNo;
+					type = newType->valueType();
+				}
 			}
 			_args.emplace_back("value");
 
@@ -108,12 +125,29 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 		[&](vector<string>& _args, vector<string>& _returnParams)
 		{
 			auto* type = _declaration.type();
-			unsigned argNo = 0;
-			while (auto newType = dynamic_cast<MappingType const*>(type))
+			long unsigned int argNo = 0;
+			std::string canon = type->canonicalName();
+			if (type->category() == Type::Category::Array)
 			{
-				_args.emplace_back("arg" + to_string(argNo));
-				++argNo;
-				type = newType->valueType();
+				std::for_each(canon.begin(), canon.end(), [&argNo](const char ch){
+					if(ch == '[') 
+					{
+						argNo++;
+					}
+				});
+				for (size_t i = 0; i < argNo; i++)
+				{
+					_args.emplace_back("arg" + to_string(i));
+				}
+			}
+			else
+			{		
+				while (auto newType = dynamic_cast<MappingType const*>(type))
+				{
+					_args.emplace_back("arg" + to_string(argNo));
+					++argNo;
+					type = newType->valueType();
+				}
 			}
 			_returnParams.emplace_back("value");
 			std::string salt = to_string(m_storageGenCount + std::rand());
