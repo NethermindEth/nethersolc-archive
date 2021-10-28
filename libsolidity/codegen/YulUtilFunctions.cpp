@@ -19,6 +19,7 @@
  * Component that can generate various useful Yul functions.
  */
 
+#include "libsolidity/ast/Types.h"
 #include <libsolidity/codegen/YulUtilFunctions.h>
 
 #include <libsolidity/codegen/MultiUseYulFunctionCollector.h>
@@ -39,8 +40,6 @@ using namespace solidity::frontend;
 string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _declaration)
 {
 	m_storageGenCount++;
-	string keeperVar_1 = to_string(m_storageGenCount);
-	string keeperVar_2 = to_string(m_storageGenCount + 100);
 	solAssert(
 		_declaration.isStateVariable() or _declaration.referenceLocation() == VariableDeclaration::Storage,
 		"Write functions are supported only for storage variables.");
@@ -50,29 +49,17 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 		[&](vector<string>& _args, vector<string>&)
 		{
 			auto* type = _declaration.type();
-			long unsigned int argNo = 0;
-			std::string canon = type->canonicalName();
-			if (type->category() == Type::Category::Array)
+			unsigned argNo = 0;
+			while (true)
 			{
-				std::for_each(canon.begin(), canon.end(), [&argNo](const char ch){
-					if(ch == '[')
-					{
-						argNo++;
-					}
-				});
-				for (size_t i = 0; i < argNo; i++)
-				{
-					_args.emplace_back("arg" + to_string(i));
-				}
-			}
-			else
-			{
-				while (auto newType = dynamic_cast<MappingType const*>(type))
-				{
-					_args.emplace_back("arg" + to_string(argNo));
-					++argNo;
+				if (auto newType = dynamic_cast<ArrayType const*>(type))
+					type = newType->baseType();
+				else if (auto newType = dynamic_cast<MappingType const*>(type))
 					type = newType->valueType();
-				}
+				else
+					break;
+				_args.emplace_back("arg" + to_string(argNo));
+				++argNo;
 			}
 			_args.emplace_back("value");
 
@@ -113,8 +100,6 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _declaration)
 {
 	m_storageGenCount++;
-	string keeperVar_1 = to_string(m_storageGenCount);
-	string keeperVar_2 = to_string(m_storageGenCount + 100);
 	solAssert(
 		_declaration.isStateVariable() or _declaration.referenceLocation() == VariableDeclaration::Storage,
 		"Read functions are supported only for storage variables.");
@@ -124,29 +109,17 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 		[&](vector<string>& _args, vector<string>& _returnParams)
 		{
 			auto* type = _declaration.type();
-			long unsigned int argNo = 0;
-			std::string canon = type->canonicalName();
-			if (type->category() == Type::Category::Array)
+			unsigned argNo = 0;
+			while (true)
 			{
-				std::for_each(canon.begin(), canon.end(), [&argNo](const char ch){
-					if(ch == '[')
-					{
-						argNo++;
-					}
-				});
-				for (size_t i = 0; i < argNo; i++)
-				{
-					_args.emplace_back("arg" + to_string(i));
-				}
-			}
-			else
-			{
-				while (auto newType = dynamic_cast<MappingType const*>(type))
-				{
-					_args.emplace_back("arg" + to_string(argNo));
-					++argNo;
+				if (auto newType = dynamic_cast<ArrayType const*>(type))
+					type = newType->baseType();
+				else if (auto newType = dynamic_cast<MappingType const*>(type))
 					type = newType->valueType();
-				}
+				else
+					break;
+				_args.emplace_back("arg" + to_string(argNo));
+				++argNo;
 			}
 			_returnParams.emplace_back("value");
 			std::string salt = to_string(m_storageGenCount + std::rand());
