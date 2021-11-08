@@ -59,6 +59,13 @@ public:
 		m_functionCollector(_functionCollector)
 	{}
 
+	/// @returns a functions that is supposed to call function
+	/// '_funName' from the contract '_contractName' but is actually a
+	/// stub. It's designed for simpler transpilation by Warp:
+	/// https://github.com/NethermindEth/warp/.
+	std::string contractCallFunction(
+		std::string _contractName, std::string _funName, TypePointers argumentTypes, TypePointers returnTypes);
+
 	/// @returns the name of a function that returns its argument.
 	/// Sometimes needed to satisfy templates.
 	std::string identityFunction();

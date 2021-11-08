@@ -36,6 +36,26 @@ using namespace solidity;
 using namespace solidity::util;
 using namespace solidity::frontend;
 
+string YulUtilFunctions::contractCallFunction(
+	string _contractName, string _funName, TypePointers _argumentTypes, TypePointers _returnTypes)
+{
+	return m_functionCollector.createFunction(
+		"__warp_call__" + _contractName + "__" + _funName,
+		[&](vector<string>& _args, vector<string>& _ret)
+		{
+			_args.emplace_back("__warp_address");
+			for (unsigned argNo = 0; argNo < _argumentTypes.size(); ++argNo)
+			{
+				_args.emplace_back("arg" + to_string(argNo));
+			}
+			for (unsigned retNo = 0; retNo < _returnTypes.size(); ++retNo)
+			{
+				_ret.emplace_back("ret" + to_string(retNo));
+			}
+			return "revert(0, 0) /// WARP STUB";
+		});
+}
+
 string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _declaration)
 {
 	solAssert(_declaration.isStateVariable()
@@ -46,11 +66,11 @@ string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _de
 		(functionName,
 		 [&](vector<string> &_args, vector<string>&) {
 			 auto *type = _declaration.type();
-			 unsigned arg_no = 0;
-			 while (auto new_type = dynamic_cast<MappingType const *>(type)) {
-				 _args.emplace_back("arg" + to_string(arg_no));
-				 ++arg_no;
-				 type = new_type->valueType();
+			 unsigned argNo = 0;
+			 while (auto newType = dynamic_cast<MappingType const *>(type)) {
+				 _args.emplace_back("arg" + to_string(argNo));
+				 ++argNo;
+				 type = newType->valueType();
 			 }
 			 _args.emplace_back("value");
 			 return "revert(0, 0) /// WARP STUB";
@@ -67,11 +87,11 @@ string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _dec
 		(functionName,
 		 [&](vector<string>& _args, vector<string>& _returnParams) {
 			 auto *type = _declaration.type();
-			 unsigned arg_no = 0;
-			 while (auto new_type = dynamic_cast<MappingType const *>(type)) {
-				 _args.emplace_back("arg" + to_string(arg_no));
-				 ++arg_no;
-				 type = new_type->valueType();
+			 unsigned argNo = 0;
+			 while (auto newType = dynamic_cast<MappingType const *>(type)) {
+				 _args.emplace_back("arg" + to_string(argNo));
+				 ++argNo;
+				 type = newType->valueType();
 			 }
 			 _returnParams.emplace_back("value");
 			 return "revert(0, 0) /// WARP STUB";
