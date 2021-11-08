@@ -1,6 +1,7 @@
 name: buildpack-deps
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [ warp/develop ]
     paths:
@@ -14,7 +15,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      DOCKER_REPOSITORY: solbuildpackpusher/solidity-buildpack-deps
+      DOCKER_REPOSITORY: nethermindsolbuildpackpusher/solidity-buildpack-deps
       IMAGE_NAME: buildpack-deps
 
     runs-on: ubuntu-latest
@@ -31,7 +32,7 @@ jobs:
 
       - name: Upgrade ${{ env.IMAGE_NAME }}-${{ matrix.image_variant }}
         run: |
-          echo ${DOCKERHUB_TOKEN} | docker login -u solbuildpackpusher --password-stdin
+          echo ${DOCKERHUB_TOKEN} | docker login -u nethermindsolbuildpackpusher --password-stdin
           scripts/ci/docker_upgrade.sh ${{ env.IMAGE_NAME }} ${{ matrix.image_variant }} ${{ env.DOCKER_REPOSITORY }}
           docker logout
 

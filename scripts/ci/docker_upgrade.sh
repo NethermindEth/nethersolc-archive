@@ -19,15 +19,15 @@ DOCKERFILE="scripts/docker/${IMAGE_NAME}/Dockerfile.${IMAGE_VARIANT}"
 echo "-- check_dockerfile_was_changed"
 
 # exit, if the dockerfile was not changed.
-if git diff --quiet origin/develop HEAD -- "${DOCKERFILE}"; then
+if git diff --quiet origin/warp/develop HEAD -- "${DOCKERFILE}"; then
   echo "${DOCKERFILE} was not changed. Nothing to do."
   exit 0
 fi
 
 echo "-- check_version"
 
-PREV_VERSION=$(git diff origin/develop HEAD -- "${DOCKERFILE}" | grep -e '^\s*-LABEL\s\+version=".*"\s*$' | awk -F'"' '{ print $2 }')
-NEXT_VERSION=$(git diff origin/develop HEAD -- "${DOCKERFILE}" | grep -e '^\s*+LABEL\s\+version=".*"\s*$' | awk -F'"' '{ print $2 }')
+PREV_VERSION=$(git diff origin/warp/develop HEAD -- "${DOCKERFILE}" | grep -e '^\s*-LABEL\s\+version=".*"\s*$' | awk -F'"' '{ print $2 }')
+NEXT_VERSION=$(git diff origin/warp/develop HEAD -- "${DOCKERFILE}" | grep -e '^\s*+LABEL\s\+version=".*"\s*$' | awk -F'"' '{ print $2 }')
 
 [[ $NEXT_VERSION != "" ]] || error "No version label defined in Dockerfile. You may need to add 'LABEL version' in '${DOCKERFILE}'."
 
