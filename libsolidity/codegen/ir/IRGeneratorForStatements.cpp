@@ -2094,24 +2094,12 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 		{
 			case DataLocation::Storage:
 			{
-				string slot = m_context.newYulVariable();
-				string offset = m_context.newYulVariable();
-
-				appendCode() << Whiskers(R"(
-					let <slot>, <offset> := <indexFunc>(<array>, <index>)
-				)")
-				("slot", slot)
-				("offset", offset)
-				("indexFunc", m_utils.storageArrayIndexAccessFunction(arrayType))
-				("array", IRVariable(_indexAccess.baseExpression()).part("slot").name())
-				("index", IRVariable(*_indexAccess.indexExpression()).name())
-				.render();
-
-				setLValue(_indexAccess, IRLValue{
-					*_indexAccess.annotation().type,
-					IRLValue::Storage{slot, offset}
-				});
-
+				m_currentWarpStorageVar->args.emplace_back(IRVariable{*_indexAccess.indexExpression()}.name());
+				if (_indexAccess.annotation().finalIndexAccess)
+				{
+					setLValue(_indexAccess, IRLValue{*_indexAccess.annotation().type, *m_currentWarpStorageVar});
+					m_currentWarpStorageVar.reset();
+				}
 				break;
 			}
 			case DataLocation::Memory:
@@ -2342,7 +2330,8 @@ void IRGeneratorForStatements::handleVariableReference(
 		});
 	else if (m_context.isStateVariable(_variable))
 	{
-		if (_variable.type()->category() == Type::Category::Mapping)
+		auto category = _variable.type()->category();
+		if (category == Type::Category::Mapping or category == Type::Category::Array)
 			m_currentWarpStorageVar.emplace(IRLValue::WarpStorage{_variable, {}});
 		else if (_variable.type()->isValueType())
 			setLValue(
