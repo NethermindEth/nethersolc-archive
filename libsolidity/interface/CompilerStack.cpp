@@ -40,6 +40,7 @@
 #include <libsolidity/analysis/StaticAnalyzer.h>
 #include <libsolidity/analysis/SyntaxChecker.h>
 #include <libsolidity/analysis/Scoper.h>
+#include <libsolidity/analysis/IndexAccessResolver.h>
 #include <libsolidity/analysis/TypeChecker.h>
 #include <libsolidity/analysis/ViewPureChecker.h>
 #include <libsolidity/analysis/ImmutableValidator.h>
@@ -459,6 +460,10 @@ bool CompilerStack::analyze()
 		for (Source const* source: m_sourceOrder)
 			if (source->ast && !docStringAnalyser.analyseDocStrings(*source->ast))
 				noErrors = false;
+		IndexAccessResolver indexAccessResolver;
+		for (Source const* source: m_sourceOrder)
+			if (source->ast)
+				indexAccessResolver.resolve(*source->ast);
 
 		// Now we run full type checks that go down to the expression level. This
 		// cannot be done earlier, because we need cross-contract types and information

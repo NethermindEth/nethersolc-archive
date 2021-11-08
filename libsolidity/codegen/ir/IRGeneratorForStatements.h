@@ -225,6 +225,7 @@ private:
 	std::function<std::string()> m_placeholderCallback;
 	YulUtilFunctions& m_utils;
 	std::optional<IRLValue> m_currentLValue;
+	std::optional<IRLValue::WarpStorage> m_currentWarpStorageVar;
 };
 
 }
