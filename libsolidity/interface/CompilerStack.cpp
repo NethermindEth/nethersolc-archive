@@ -332,9 +332,6 @@ bool CompilerStack::parse()
 		solThrow(CompilerError, "Must call parse only after the SourcesSet state.");
 	m_errorReporter.clear();
 
-	if (SemVerVersion{string(VersionString)}.isPrerelease())
-		m_errorReporter.warning(3805_error, "This is a pre-release compiler version, please do not use it in production.");
-
 	Parser parser{m_errorReporter, m_evmVersion, m_parserErrorRecovery};
 
 	vector<string> sourcesToParse;

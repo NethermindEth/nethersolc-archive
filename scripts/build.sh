@@ -18,7 +18,7 @@ mkdir -p "${BUILDDIR}"
 cd "${BUILDDIR}"
 
 cmake .. -DCMAKE_BUILD_TYPE="$BUILD_TYPE" "${@:2}"
-make -j2
+make -j"$(getconf _NPROCESSORS_ONLN)"
 
 if [[ "${CI}" == "" ]]; then
 	echo "Installing ..."

@@ -2480,14 +2480,10 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 	}
 
 	Whiskers templ(R"(
-		<?checkExtcodesize>
-			if iszero(extcodesize(<address>)) { <revertNoCode>() }
-		</checkExtcodesize>
 		// storage for arguments and returned data
 		let <pos> := <allocateUnbounded>()
 		mstore(<pos>, <shl28>(<funSel>))
 		let <end> := <encodeArgs>(add(<pos>, 4) <argumentString>)
-
 		let <success> := <call>(<gas>, <address>, <?hasValue> <value>, </hasValue> <pos>, sub(<end>, <pos>), <pos>, <reservedReturnSize>)
 		<?noTryCall>
 			if iszero(<success>) { <forwardingRevert>() }
