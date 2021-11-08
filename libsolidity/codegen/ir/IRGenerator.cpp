@@ -94,8 +94,7 @@ pair<string, string> IRGenerator::run(
 )
 {
 	string sourceName = *_contract.location().sourceName;
-	string const ir = yul::reindent(generate(_contract, _cborMetadata, _otherYulSources));
-
+	string const ir = yul::reindent(generate(_contract, _cborMetadata,  _otherYulSources));
 	yul::AssemblyStack asmStack(m_evmVersion, yul::AssemblyStack::Language::StrictAssembly, m_optimiserSettings);
 	if (!asmStack.parseAndAnalyze(sourceName, ir))
 	{
@@ -108,16 +107,7 @@ pair<string, string> IRGenerator::run(
 		solAssert(false, ir + "\n\nInvalid IR generated:\n" + errorMessage + "\n");
 	}
 	asmStack.optimize();
-
-	string warning =
-		"/*=====================================================*\n"
-		" *                       WARNING                       *\n"
-		" *  Solidity to Yul compilation is still EXPERIMENTAL  *\n"
-		" *       It can result in LOSS OF FUNDS or worse       *\n"
-		" *                !USE AT YOUR OWN RISK!               *\n"
-		" *=====================================================*/\n\n";
-
-	return {warning + ir, warning + asmStack.print(m_context.soliditySourceProvider())};
+	return {ir, asmStack.print(m_context.soliditySourceProvider())};
 }
 
 string IRGenerator::generate(
@@ -126,6 +116,7 @@ string IRGenerator::generate(
 	map<ContractDefinition const*, string_view const> const& _otherYulSources
 )
 {
+	toHex(_cborMetadata);
 	auto subObjectSources = [&_otherYulSources](std::set<ContractDefinition const*, ASTNode::CompareByID> const& subObjects) -> string
 	{
 		std::string subObjectsSources;
@@ -144,19 +135,9 @@ string IRGenerator::generate(
 	};
 
 	Whiskers t(R"(
-		/// @use-src <useSrcMapCreation>
 		object "<CreationObject>" {
 			code {
 				<sourceLocationCommentCreation>
-				<memoryInitCreation>
-				<callValueCheck>
-				<?library>
-				<!library>
-				<?constructorHasParams> let <constructorParams> := <copyConstructorArguments>() </constructorHasParams>
-				<constructor>(<constructorParams>)
-				</library>
-				<deploy>
-				<functions>
 			}
 			/// @use-src <useSrcMapDeployed>
 			object "<DeployedObject>" {
@@ -169,10 +150,7 @@ string IRGenerator::generate(
 					<dispatch>
 					<deployedFunctions>
 				}
-				<deployedSubObjects>
-				data "<metadataName>" hex"<cborMetadata>"
 			}
-			<subObjects>
 		}
 	)");
 
@@ -185,33 +163,27 @@ string IRGenerator::generate(
 	t("library", _contract.isLibrary());
 
 	FunctionDefinition const* constructor = _contract.constructor();
-	t("callValueCheck", !constructor || !constructor->isPayable() ? callValueCheck() : "");
 	vector<string> constructorParams;
 	if (constructor && !constructor->parameters().empty())
 	{
 		for (size_t i = 0; i < CompilerUtils::sizeOnStack(constructor->parameters()); ++i)
 			constructorParams.emplace_back(m_context.newYulVariable());
-		t(
-			"copyConstructorArguments",
-			m_utils.copyConstructorArgumentsToMemoryFunction(_contract, IRNames::creationObject(_contract))
-		);
+		m_utils.copyConstructorArgumentsToMemoryFunction(_contract, IRNames::creationObject(_contract));
 	}
-	t("constructorParams", joinHumanReadable(constructorParams));
-	t("constructorHasParams", !constructorParams.empty());
-	t("constructor", IRNames::constructor(_contract));
+	joinHumanReadable(constructorParams);
 
-	t("deploy", deployCode(_contract));
+	deployCode(_contract);
 	generateConstructors(_contract);
 	set<FunctionDefinition const*> creationFunctionList = generateQueuedFunctions();
 	InternalDispatchMap internalDispatchMap = generateInternalDispatchFunctions(_contract);
 
-	t("functions", m_context.functionCollector().requestedFunctions());
-	t("subObjects", subObjectSources(m_context.subObjectsCreated()));
+	m_context.functionCollector().requestedFunctions();
+	subObjectSources(m_context.subObjectsCreated());
 
 	// This has to be called only after all other code generation for the creation object is complete.
 	bool creationInvolvesAssembly = m_context.inlineAssemblySeen();
-	t("memoryInitCreation", memoryInit(!creationInvolvesAssembly));
-	t("useSrcMapCreation", formatUseSrcMap(m_context));
+	memoryInit(!creationInvolvesAssembly);
+	formatUseSrcMap(m_context);
 
 	resetContext(_contract, ExecutionContext::Deployed);
 
@@ -228,9 +200,6 @@ string IRGenerator::generate(
 	set<FunctionDefinition const*> deployedFunctionList = generateQueuedFunctions();
 	generateInternalDispatchFunctions(_contract);
 	t("deployedFunctions", m_context.functionCollector().requestedFunctions());
-	t("deployedSubObjects", subObjectSources(m_context.subObjectsCreated()));
-	t("metadataName", yul::Object::metadataName());
-	t("cborMetadata", toHex(_cborMetadata));
 
 	t("useSrcMapDeployed", formatUseSrcMap(m_context));
 

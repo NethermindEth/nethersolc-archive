@@ -219,7 +219,6 @@ void CommandLineInterface::handleIROptimized(string const& _contractName)
 		createFile(m_compiler->filesystemFriendlyName(_contractName) + "_opt.yul", m_compiler->yulIROptimized(_contractName));
 	else
 	{
-		sout() << "Optimized IR:" << endl;
 		sout() << m_compiler->yulIROptimized(_contractName) << endl;
 	}
 }
