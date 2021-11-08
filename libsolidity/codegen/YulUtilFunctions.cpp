@@ -274,7 +274,7 @@ string YulUtilFunctions::leftAlignFunction(Type const& _type)
 		switch (_type.category())
 		{
 		case Type::Category::Address:
-			templ("body", "aligned := " + leftAlignFunction(IntegerType(160)) + "(value)");
+			templ("body", "aligned := " + leftAlignFunction(IntegerType(256)) + "(value)");
 			break;
 		case Type::Category::Integer:
 		{
@@ -2204,7 +2204,7 @@ string YulUtilFunctions::arrayDataAreaFunction(ArrayType const& _type)
 					</memory>
 					<?storage>
 						mstore(0, ptr)
-						data := keccak256(0, 0x20)
+						data := pedersen(0, 0x20)
 					</storage>
 				</dynamic>
 			}
@@ -2548,7 +2548,7 @@ string YulUtilFunctions::mappingIndexAccessFunction(MappingType const& _mappingT
 				function <functionName>(slot <key>) -> dataSlot {
 					mstore(0, <convertedKey>)
 					mstore(0x20, slot)
-					dataSlot := keccak256(0, 0x40)
+					dataSlot := pedersen(0, 0x40)
 				}
 			)");
 			templ("functionName", functionName);
@@ -3277,7 +3277,7 @@ string YulUtilFunctions::conversionFunction(Type const& _from, Type const& _to)
 		case Type::Category::Contract:
 			body =
 				Whiskers("converted := <convert>(value)")
-					("convert", conversionFunction(IntegerType(160), _to))
+					("convert", conversionFunction(IntegerType(256), _to))
 					.render();
 			break;
 		case Type::Category::Integer:
@@ -3386,7 +3386,7 @@ string YulUtilFunctions::conversionFunction(Type const& _from, Type const& _to)
 			else if (toCategory == Type::Category::Address)
 				body =
 					Whiskers("converted := <convert>(value)")
-						("convert", conversionFunction(_from, IntegerType(160)))
+						("convert", conversionFunction(_from, IntegerType(256)))
 						.render();
 			else
 			{
@@ -3717,7 +3717,7 @@ string YulUtilFunctions::cleanupFunction(Type const& _type)
 		switch (_type.category())
 		{
 		case Type::Category::Address:
-			templ("body", "cleaned := " + cleanupFunction(IntegerType(160)) + "(value)");
+			templ("body", "cleaned := " + cleanupFunction(IntegerType(256)) + "(value)");
 			break;
 		case Type::Category::Integer:
 		{
@@ -4490,7 +4490,7 @@ string YulUtilFunctions::extractReturndataFunction()
 
 string YulUtilFunctions::copyConstructorArgumentsToMemoryFunction(
 	ContractDefinition const& _contract,
-	string const& _creationObjectName
+	[[maybe_unused]] string const& _creationObjectName
 )
 {
 	string functionName = "copy_arguments_for_constructor_" +
@@ -4506,20 +4506,12 @@ string YulUtilFunctions::copyConstructorArgumentsToMemoryFunction(
 
 		return util::Whiskers(R"(
 			function <functionName>() -> <retParams> {
-				let programSize := datasize("<object>")
-				let argSize := sub(codesize(), programSize)
-
-				let memoryDataOffset := <allocate>(argSize)
-				codecopy(memoryDataOffset, programSize, argSize)
-
-				<retParams> := <abiDecode>(memoryDataOffset, add(memoryDataOffset, argSize))
+				<retParams> := <abiDecode>(0, calldatasize())
 			}
 		)")
 		("functionName", functionName)
 		("retParams", returnParams)
-		("object", _creationObjectName)
-		("allocate", allocationFunction())
-		("abiDecode", abiFunctions.tupleDecoder(FunctionType(*_contract.constructor()).parameterTypes(), true))
+		("abiDecode", abiFunctions.tupleDecoder(FunctionType(*_contract.constructor()).parameterTypes()))
 		.render();
 	});
 }

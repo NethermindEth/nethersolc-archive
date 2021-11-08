@@ -1,0 +1,52 @@
+name: Build and test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ warp/develop ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+          - os: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Set up GCC
+        uses: egor-tensin/setup-gcc@v1
+        with:
+            version: 11
+
+      - name: Install dependencies
+        run: |
+          ./scripts/install_deps.sh
+
+      - name: Gen Cache Id
+        run: |
+          echo "::set-output name=timestamp::$(date '+%s')"
+        id: cache-id
+
+      - name: Cache build
+        uses: actions/cache@v2
+        with:
+          path: build
+          key: ${{ matrix.config.os }}-build-${{ steps.cache-id.outputs.timestamp }}
+          restore-keys: |
+            ${{ matrix.config.os }}-build-
+
+      - name: Build
+        run: |
+          mkdir -p build && cd build
+          cmake .. && make solc -j$(nproc)
+
+      - name: Upload the solc artifact
+        uses: actions/upload-artifact@v2
+        with:
+            name: solc
+            path: build/solc/solc

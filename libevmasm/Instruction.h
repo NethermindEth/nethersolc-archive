@@ -63,6 +63,7 @@ enum class Instruction: uint8_t
 	SAR,				///< bitwise SAR operation
 
 	KECCAK256 = 0x20,		///< compute KECCAK-256 hash
+	PEDERSEN  = 0x21,		///< compute PEDERSEN hash
 
 	ADDRESS = 0x30,		///< get address of currently executing account
 	BALANCE,			///< get balance of the given account
@@ -182,7 +183,7 @@ enum class Instruction: uint8_t
 	CALLCODE,			///< message-call with another account's code only
 	RETURN,				///< halt execution returning output data
 	DELEGATECALL,		///< like CALLCODE but keeps caller's value and sender
-	CREATE2 = 0xf5,		///< create new account with associated code at address `sha3(0xff + sender + salt + init code) % 2**160`
+	CREATE2 = 0xf5,		///< create new account with associated code at address `sha3(0xff + sender + salt + init code) % 2**256`
 	STATICCALL = 0xfa,	///< like CALL but disallow state modifications
 
 	REVERT = 0xfd,		///< halt execution, revert state and return output data

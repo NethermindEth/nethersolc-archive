@@ -93,16 +93,17 @@ pair<string, string> IRGenerator::run(
 	map<ContractDefinition const*, string_view const> const& _otherYulSources
 )
 {
+	string sourceName = *_contract.location().sourceName;
 	string const ir = yul::reindent(generate(_contract, _cborMetadata, _otherYulSources));
 
 	yul::AssemblyStack asmStack(m_evmVersion, yul::AssemblyStack::Language::StrictAssembly, m_optimiserSettings);
-	if (!asmStack.parseAndAnalyze("", ir))
+	if (!asmStack.parseAndAnalyze(sourceName, ir))
 	{
 		string errorMessage;
 		for (auto const& error: asmStack.errors())
 			errorMessage += langutil::SourceReferenceFormatter::formatErrorInformation(
 				*error,
-				asmStack.charStream("")
+				asmStack.charStream(sourceName)
 			);
 		solAssert(false, ir + "\n\nInvalid IR generated:\n" + errorMessage + "\n");
 	}
@@ -901,16 +902,10 @@ void IRGenerator::generateConstructors(ContractDefinition const& _contract)
 string IRGenerator::deployCode(ContractDefinition const& _contract)
 {
 	Whiskers t(R"X(
-		let <codeOffset> := <allocateUnbounded>()
-		codecopy(<codeOffset>, dataoffset("<object>"), datasize("<object>"))
 		<#immutables>
-			setimmutable(<codeOffset>, "<immutableName>", <value>)
+			setimmutable(0, "<immutableName>", <value>)
 		</immutables>
-		return(<codeOffset>, datasize("<object>"))
 	)X");
-	t("allocateUnbounded", m_utils.allocateUnboundedFunction());
-	t("codeOffset", m_context.newYulVariable());
-	t("object", IRNames::deployedObject(_contract));
 
 	vector<map<string, string>> immutables;
 	if (_contract.isLibrary())
@@ -953,7 +948,6 @@ string IRGenerator::dispatchRoutine(ContractDefinition const& _contract)
 			{
 				// <functionName>
 				<delegatecallCheck>
-				<callValueCheck>
 				<?+params>let <params> := </+params> <abiDecode>(4, calldatasize())
 				<?+retParams>let <retParams> := </+retParams> <function>(<params>)
 				let memPos := <allocateUnbounded>()
@@ -988,7 +982,6 @@ string IRGenerator::dispatchRoutine(ContractDefinition const& _contract)
 					"() }";
 		}
 		templ["delegatecallCheck"] = delegatecallCheck;
-		templ["callValueCheck"] = (type->isPayable() || _contract.isLibrary()) ? "" : callValueCheck();
 
 		unsigned paramVars = make_shared<TupleType>(type->parameterTypes())->sizeOnStack();
 		unsigned retVars = make_shared<TupleType>(type->returnParameterTypes())->sizeOnStack();
