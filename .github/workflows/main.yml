@@ -21,9 +21,9 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Install dependencies
-        run: | 
+        run: |
           ./scripts/install_deps.sh
-          
+
       - name: Install evmone (linux)
         run: |
           mkdir -p deps
@@ -45,7 +45,8 @@ jobs:
           brew tap cvc4/cvc4
           brew install cvc4/cvc4/cvc4
         if: matrix.config.os == 'macos-10.15'
-              - name: Gen Cache Id
+
+      - name: Gen Cache Id
         run: |
           echo "::set-output name=timestamp::$(date '+%s')"
         id: cache-id
@@ -64,7 +65,3 @@ jobs:
           mkdir build
           cd build
           TERM=dumb cmake .. && make
-        
-      - name: Test
-        run: |
-        TERM=dumb ./scripts/tests.sh
