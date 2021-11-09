@@ -2401,7 +2401,7 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 			appendCode() << "mstore(add(" << m_utils.allocateUnboundedFunction() << "() , " << to_string(returnInfo.estimatedReturnSize) << "), 0)\n";
 	}
 
-	Whiskers templ(R"(if iszero(extcodesize(<address>)) { <revertNoCode>() }
+	Whiskers templ(R"(
 		// storage for arguments and returned data
 		let <pos> := <allocateUnbounded>()
 		mstore(<pos>, <shl28>(<funSel>))
@@ -2422,7 +2422,6 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 			<?+retVars> <retVars> := </+retVars> <abiDecode>(<pos>, add(<pos>, <returnSize>))
 		}
 	)");
-	templ("revertNoCode", m_utils.revertReasonIfDebugFunction("Target contract does not contain code"));
 	templ("pos", m_context.newYulVariable());
 	templ("end", m_context.newYulVariable());
 	if (_functionCall.annotation().tryCall)
