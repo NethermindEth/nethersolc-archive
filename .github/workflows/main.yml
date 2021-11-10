@@ -65,3 +65,9 @@ jobs:
           mkdir build
           cd build
           TERM=dumb cmake .. && make
+
+      - name: Upload the solc artifact
+        uses: actions/upload-artifact@v2
+        with:
+            name: solc
+            path: build/solc/solc
