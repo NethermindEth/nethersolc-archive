@@ -15,7 +15,6 @@ jobs:
           - os: ubuntu-latest
           - os: macos-10.15
 
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
@@ -32,7 +31,6 @@ jobs:
       - name: Cache build
         uses: actions/cache@v2
         with:
-          # npm cache files are stored in `~/.npm` on Linux/macOS
           path: build
           key: ${{ matrix.config.os }}-build-${{ steps.cache-id.outputs.timestamp }}
           restore-keys: |
@@ -40,9 +38,8 @@ jobs:
 
       - name: Build
         run: |
-          mkdir build
-          cd build
-          TERM=dumb cmake .. && make
+          mkdir build && cd build
+          cmake -DCMAKE_CXX_COMPILER=g++-10 -DCMAKE_C_COMPILER=gcc-10 .. && make -j$(nproc)
 
       - name: Upload the solc artifact
         uses: actions/upload-artifact@v2
