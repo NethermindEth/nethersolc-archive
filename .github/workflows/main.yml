@@ -15,10 +15,14 @@ jobs:
           - os: ubuntu-latest
           - os: macos-10.15
 
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
+
+      - name: Set up GCC
+        uses: egor-tensin/setup-gcc@v1
+        with:
+            version: 11
 
       - name: Install dependencies
         run: |
@@ -32,17 +36,15 @@ jobs:
       - name: Cache build
         uses: actions/cache@v2
         with:
-          # npm cache files are stored in `~/.npm` on Linux/macOS
           path: build
           key: ${{ matrix.config.os }}-build-${{ steps.cache-id.outputs.timestamp }}
           restore-keys: |
-            ${{ matrix.conig.os }}-build-
+            ${{ matrix.config.os }}-build-
 
       - name: Build
         run: |
-          mkdir build
-          cd build
-          TERM=dumb cmake .. && make
+          mkdir -p build && cd build
+          cmake .. && make solc -j$(nproc)
 
       - name: Upload the solc artifact
         uses: actions/upload-artifact@v2
