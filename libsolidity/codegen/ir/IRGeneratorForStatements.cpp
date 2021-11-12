@@ -265,7 +265,10 @@ void IRGeneratorForStatements::initializeStateVar(VariableDeclaration const& _va
 		writeToLValue(
 			_varDecl.immutable() ?
 			IRLValue{*_varDecl.annotation().type, IRLValue::Immutable{&_varDecl}} :
-			IRLValue{*_varDecl.annotation().type, IRLValue::WarpStorage{_varDecl, {}}},
+			IRLValue{*_varDecl.annotation().type, IRLValue::Storage{
+				toCompactHexWithPrefix(m_context.storageLocationOfStateVariable(_varDecl).first),
+				m_context.storageLocationOfStateVariable(_varDecl).second
+			}},
 			*_varDecl.value()
 		);
 	}
@@ -675,15 +678,6 @@ bool IRGeneratorForStatements::visit(UnaryOperation const& _unaryOperation)
 		solAssert(!!m_currentLValue, "LValue not retrieved.");
 		std::visit(
 			util::GenericVisitor{
-				[&](IRLValue::WarpStorage const& _storage) {
-					appendCode() <<
-						m_utils.warpStorageWriteFunction(_storage.variable) <<
-						"(" <<
-						joinHumanReadable(_storage.args) <<
-						", " << "0" <<
-						")\n";
-					m_currentLValue.reset();
-				},
 				[&](IRLValue::Storage const& _storage) {
 					appendCode() <<
 						m_utils.storageSetToZeroFunction(m_currentLValue->type) <<
@@ -1057,6 +1051,24 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 		);
 		break;
 	}
+	case FunctionType::Kind::Wrap:
+	case FunctionType::Kind::Unwrap:
+	{
+		solAssert(arguments.size() == 1, "");
+		FunctionType::Kind kind = functionType->kind();
+		if (kind == FunctionType::Kind::Wrap)
+			solAssert(
+				type(*arguments.at(0)).isImplicitlyConvertibleTo(
+					dynamic_cast<UserDefinedValueType const&>(type(_functionCall)).underlyingType()
+				),
+				""
+			);
+		else
+			solAssert(type(*arguments.at(0)).category() == Type::Category::UserDefinedValueType, "");
+
+		define(_functionCall, *arguments.at(0));
+		break;
+	}
 	case FunctionType::Kind::Assert:
 	case FunctionType::Kind::Require:
 	{
@@ -1121,16 +1133,14 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 				IRVariable array = convert(*arguments[0], *TypeProvider::bytesMemory());
 				IRVariable hashVariable(m_context.newYulVariable(), *TypeProvider::fixedBytes(32));
 
+				string dataAreaFunction = m_utils.arrayDataAreaFunction(*TypeProvider::bytesMemory());
+				string arrayLengthFunction = m_utils.arrayLengthFunction(*TypeProvider::bytesMemory());
 				define(hashVariable) <<
 					"keccak256(" <<
-					m_utils.arrayDataAreaFunction(*TypeProvider::bytesMemory()) <<
-					"(" <<
-					array.commaSeparatedList() <<
-					"), " <<
-					m_utils.arrayLengthFunction(*TypeProvider::bytesMemory()) <<
-					"(" <<
-					array.commaSeparatedList() <<
-					"))\n";
+					(dataAreaFunction + "(" + array.commaSeparatedList() + ")") <<
+					", " <<
+					(arrayLengthFunction + "(" + array.commaSeparatedList() +")") <<
+					")\n";
 				IRVariable selectorVariable(m_context.newYulVariable(), *TypeProvider::fixedBytes(4));
 				define(selectorVariable, hashVariable);
 				selector = selectorVariable.name();
@@ -1255,16 +1265,14 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 		{
 			auto array = convert(*arguments[0], *arrayType);
 
+			string dataAreaFunction = m_utils.arrayDataAreaFunction(*arrayType);
+			string arrayLengthFunction = m_utils.arrayLengthFunction(*arrayType);
 			define(_functionCall) <<
 				"keccak256(" <<
-				m_utils.arrayDataAreaFunction(*arrayType) <<
-				"(" <<
-				array.commaSeparatedList() <<
-				"), " <<
-				m_utils.arrayLengthFunction(*arrayType) <<
-				"(" <<
-				array.commaSeparatedList() <<
-				"))\n";
+				(dataAreaFunction + "(" + array.commaSeparatedList() + ")") <<
+				", " <<
+				(arrayLengthFunction + "(" + array.commaSeparatedList() +")") <<
+				")\n";
 		}
 		break;
 	}
@@ -1652,11 +1660,14 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 				expressionAsType(_memberAccess.expression(), *TypeProvider::address()) <<
 				")\n";
 		else if (member == "code")
+		{
+			string externalCodeFunction = m_utils.externalCodeFunction();
 			define(_memberAccess) <<
-				m_utils.externalCodeFunction() <<
+				externalCodeFunction <<
 				"(" <<
 				expressionAsType(_memberAccess.expression(), *TypeProvider::address()) <<
 				")\n";
+		}
 		else if (member == "codehash")
 			define(_memberAccess) <<
 				"extcodehash(" <<
@@ -1938,7 +1949,7 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 				assignInternalFunctionIDIfNotCalledDirectly(_memberAccess, resolvedFunctionDef);
 			}
 			else if (auto const* variable = dynamic_cast<VariableDeclaration const*>(_memberAccess.annotation().referencedDeclaration))
-					handleVariableReference(*variable, _memberAccess);
+				handleVariableReference(*variable, _memberAccess);
 			else if (memberFunctionType)
 			{
 				switch (memberFunctionType->kind())
@@ -2069,14 +2080,23 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 	{
 		solAssert(_indexAccess.indexExpression(), "Index expression expected.");
 
-		solAssert(m_currentWarpStorageVar, "Warp storage var should have been initialized");
-		m_currentWarpStorageVar->args.emplace_back(IRVariable{*_indexAccess.indexExpression()}.name());
-		if (_indexAccess.annotation().finalIndexAccess)
-		{
-			setLValue(_indexAccess,
-					  IRLValue{*_indexAccess.annotation().type, *m_currentWarpStorageVar});
-			m_currentWarpStorageVar.reset();
-		}
+		MappingType const& mappingType = dynamic_cast<MappingType const&>(baseType);
+		Type const& keyType = *_indexAccess.indexExpression()->annotation().type;
+
+		string slot = m_context.newYulVariable();
+		Whiskers templ("let <slot> := <indexAccess>(<base><?+key>,<key></+key>)\n");
+		templ("slot", slot);
+		templ("indexAccess", m_utils.mappingIndexAccessFunction(mappingType, keyType));
+		templ("base", IRVariable(_indexAccess.baseExpression()).commaSeparatedList());
+		templ("key", IRVariable(*_indexAccess.indexExpression()).commaSeparatedList());
+		appendCode() << templ.render();
+		setLValue(_indexAccess, IRLValue{
+			*_indexAccess.annotation().type,
+			IRLValue::Storage{
+				slot,
+				0u
+			}
+		});
 	}
 	else if (baseType.category() == Type::Category::Array || baseType.category() == Type::Category::ArraySlice)
 	{
@@ -2094,12 +2114,24 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 		{
 			case DataLocation::Storage:
 			{
-				m_currentWarpStorageVar->args.emplace_back(IRVariable{*_indexAccess.indexExpression()}.name());
-				if (_indexAccess.annotation().finalIndexAccess)
-				{
-					setLValue(_indexAccess, IRLValue{*_indexAccess.annotation().type, *m_currentWarpStorageVar});
-					m_currentWarpStorageVar.reset();
-				}
+				string slot = m_context.newYulVariable();
+				string offset = m_context.newYulVariable();
+
+				appendCode() << Whiskers(R"(
+					let <slot>, <offset> := <indexFunc>(<array>, <index>)
+				)")
+				("slot", slot)
+				("offset", offset)
+				("indexFunc", m_utils.storageArrayIndexAccessFunction(arrayType))
+				("array", IRVariable(_indexAccess.baseExpression()).part("slot").name())
+				("index", IRVariable(*_indexAccess.indexExpression()).name())
+				.render();
+
+				setLValue(_indexAccess, IRLValue{
+					*_indexAccess.annotation().type,
+					IRLValue::Storage{slot, offset}
+				});
+
 				break;
 			}
 			case DataLocation::Memory:
@@ -2120,8 +2152,9 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 			}
 			case DataLocation::CallData:
 			{
+				string indexAccessFunction = m_utils.calldataArrayIndexAccessFunction(arrayType);
 				string const indexAccessFunctionCall =
-					m_utils.calldataArrayIndexAccessFunction(arrayType) +
+					indexAccessFunction +
 					"(" +
 					IRVariable(_indexAccess.baseExpression()).commaSeparatedList() +
 					", " +
@@ -2329,26 +2362,13 @@ void IRGeneratorForStatements::handleVariableReference(
 			IRLValue::Stack{m_context.localVariable(_variable)}
 		});
 	else if (m_context.isStateVariable(_variable))
-	{
-		auto category = _variable.type()->category();
-		if (category == Type::Category::Mapping or category == Type::Category::Array)
-			m_currentWarpStorageVar.emplace(IRLValue::WarpStorage{_variable, {}});
-		else if (_variable.type()->isValueType())
-			setLValue(
-				_referencingExpression,
-				IRLValue{
-					*_variable.annotation().type,
-					IRLValue::WarpStorage{_variable, {}},
-				});
-		else
-			setLValue(
-				_referencingExpression,
-				IRLValue{
-					*_variable.annotation().type,
-					IRLValue::Storage{
-						toCompactHexWithPrefix(m_context.storageLocationOfStateVariable(_variable).first),
-						m_context.storageLocationOfStateVariable(_variable).second}});
-	}
+		setLValue(_referencingExpression, IRLValue{
+			*_variable.annotation().type,
+			IRLValue::Storage{
+				toCompactHexWithPrefix(m_context.storageLocationOfStateVariable(_variable).first),
+				m_context.storageLocationOfStateVariable(_variable).second
+			}
+		});
 	else
 		solAssert(false, "Invalid variable kind.");
 }
@@ -2808,14 +2828,6 @@ void IRGeneratorForStatements::writeToLValue(IRLValue const& _lvalue, IRVariable
 {
 	std::visit(
 		util::GenericVisitor{
-			[&](IRLValue::WarpStorage const& _storage) {
-				auto const &varDecl = _storage.variable;
-				Whiskers templ{"<setter>(<?+args><args>, </+args><value>)\n"};
-				templ("setter", m_utils.warpStorageWriteFunction(varDecl));
-				templ("args", joinHumanReadable(_storage.args));
-				templ("value", _value.name());
-				appendCode() << templ.render();
-			},
 			[&](IRLValue::Storage const& _storage) {
 				string offsetArgument;
 				optional<unsigned> offsetStatic;
@@ -2854,13 +2866,16 @@ void IRGeneratorForStatements::writeToLValue(IRLValue const& _lvalue, IRVariable
 							")\n";
 				}
 				else if (auto const* literalType = dynamic_cast<StringLiteralType const*>(&_value.type()))
+				{
+					string writeUInt = m_utils.writeToMemoryFunction(*TypeProvider::uint256());
 					appendCode() <<
-						m_utils.writeToMemoryFunction(*TypeProvider::uint256()) <<
+						writeUInt <<
 						"(" <<
 						_memory.address <<
 						", " <<
 						m_utils.copyLiteralToMemoryFunction(literalType->value()) + "()" <<
 						")\n";
+				}
 				else
 				{
 					solAssert(_lvalue.type.sizeOnStack() == 1, "");
@@ -2900,13 +2915,6 @@ IRVariable IRGeneratorForStatements::readFromLValue(IRLValue const& _lvalue)
 {
 	IRVariable result{m_context.newYulVariable(), _lvalue.type};
 	std::visit(GenericVisitor{
-		[&](IRLValue::WarpStorage const& _storage) {
-			define(result) <<
-				m_utils.warpStorageReadFunction(_storage.variable) <<
-				"(" <<
-				joinHumanReadable(_storage.args) <<
-				")\n";
-		},
 		[&](IRLValue::Storage const& _storage) {
 			if (!_lvalue.type.isValueType())
 				define(result) << _storage.slot << "\n";
@@ -2942,7 +2950,17 @@ IRVariable IRGeneratorForStatements::readFromLValue(IRLValue const& _lvalue)
 			solUnimplementedAssert(_lvalue.type.isValueType(), "");
 			solUnimplementedAssert(_lvalue.type.sizeOnStack() == 1, "");
 			solAssert(_lvalue.type == *_immutable.variable->type(), "");
-			define(result) << "loadimmutable(\"" << to_string(_immutable.variable->id()) << "\")\n";
+			if (m_context.executionContext() == IRGenerationContext::ExecutionContext::Creation)
+			{
+				string readFunction = m_utils.readFromMemory(*_immutable.variable->type());
+				define(result) <<
+					readFunction <<
+					"(" <<
+					to_string(m_context.immutableMemoryOffset(*_immutable.variable)) <<
+					")\n";
+			}
+			else
+				define(result) << "loadimmutable(\"" << to_string(_immutable.variable->id()) << "\")\n";
 		},
 		[&](IRLValue::Tuple const&) {
 			solAssert(false, "Attempted to read from tuple lvalue.");

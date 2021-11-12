@@ -24,8 +24,6 @@ set(sources
 	analysis/FunctionCallGraph.h
 	analysis/ImmutableValidator.cpp
 	analysis/ImmutableValidator.h
-	analysis/IndexAccessResolver.cpp
-	analysis/IndexAccessResolver.h
 	analysis/GlobalContext.cpp
 	analysis/GlobalContext.h
 	analysis/NameAndTypeResolver.cpp

@@ -306,13 +306,6 @@ struct MemberAccessAnnotation: ExpressionAnnotation
 	SetOnce<VirtualLookup> requiredLookup;
 };
 
-struct IndexAccessAnnotation: ExpressionAnnotation
-{
-	/// If true, in a chain of index accesses like `a[i][j][k]`, it is
-	/// the last one (i.e. `k`).
-	bool finalIndexAccess = false;
-};
-
 struct BinaryOperationAnnotation: ExpressionAnnotation
 {
 	/// The common type that is used for the operation, not necessarily the result type (which
