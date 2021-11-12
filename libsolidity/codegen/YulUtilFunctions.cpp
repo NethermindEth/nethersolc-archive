@@ -2232,7 +2232,7 @@ string YulUtilFunctions::arrayDataAreaFunction(ArrayType const& _type)
 					</memory>
 					<?storage>
 						mstore(0, ptr)
-						data := keccak256(0, 0x20)
+						data := pedersen(0, 0x20)
 					</storage>
 				</dynamic>
 			}
@@ -2576,7 +2576,7 @@ string YulUtilFunctions::mappingIndexAccessFunction(MappingType const& _mappingT
 				function <functionName>(slot <key>) -> dataSlot {
 					mstore(0, <convertedKey>)
 					mstore(0x20, slot)
-					dataSlot := keccak256(0, 0x40)
+					dataSlot := pedersen(0, 0x40)
 				}
 			)");
 				templ("functionName", functionName);
