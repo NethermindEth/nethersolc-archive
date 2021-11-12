@@ -54,11 +54,6 @@ string IRNames::function(VariableDeclaration const& _varDecl)
 	return "getter_fun_" + _varDecl.name() + "_" + to_string(_varDecl.id());
 }
 
-string IRNames::setterFunction(VariableDeclaration const& _varDecl)
-{
-	return "setter_fun_" + _varDecl.name() + "_" + to_string(_varDecl.id());
-}
-
 string IRNames::modifierInvocation(ModifierInvocation const& _modifierInvocation)
 {
 	// This uses the ID of the modifier invocation because it has to be unique
