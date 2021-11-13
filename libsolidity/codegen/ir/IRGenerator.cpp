@@ -747,7 +747,6 @@ string IRGenerator::dispatchRoutine(ContractDefinition const& _contract)
 			{
 				// <functionName>
 				<delegatecallCheck>
-				<callValueCheck>
 				<?+params>let <params> := </+params> <abiDecode>(4, calldatasize())
 				<?+retParams>let <retParams> := </+retParams> <function>(<params>)
 				let memPos := <allocateUnbounded>()
@@ -782,7 +781,6 @@ string IRGenerator::dispatchRoutine(ContractDefinition const& _contract)
 					"() }";
 		}
 		templ["delegatecallCheck"] = delegatecallCheck;
-		templ["callValueCheck"] = (type->isPayable() || _contract.isLibrary()) ? "" : callValueCheck();
 
 		unsigned paramVars = make_shared<TupleType>(type->parameterTypes())->sizeOnStack();
 		unsigned retVars = make_shared<TupleType>(type->returnParameterTypes())->sizeOnStack();
