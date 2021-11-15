@@ -31,6 +31,8 @@
 #include <libsolutil/Keccak256.h>
 #include <libsolutil/Numeric.h>
 
+#include <liblangutil/Exceptions.h>
+
 #include <limits>
 
 using namespace std;
@@ -183,6 +185,11 @@ u256 EVMInstructionInterpreter::eval(
 		uint64_t offset = uint64_t(arg[0] & uint64_t(-1));
 		uint64_t size = uint64_t(arg[1] & uint64_t(-1));
 		return u256(keccak256(readMemory(offset, size)));
+	}
+	case Instruction::PEDERSEN:
+	{
+		m_state.trace.emplace_back("Warp PEDERSEN is not supported for interpretation");
+		BOOST_THROW_EXCEPTION(langutil::UnimplementedFeatureError{});
 	}
 	case Instruction::ADDRESS:
 		return h256(m_state.address, h256::AlignRight);
