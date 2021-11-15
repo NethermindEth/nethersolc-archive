@@ -24,35 +24,6 @@
 #include <libsolidity/ast/AST.h>
 #include <libsolidity/codegen/CompilerUtils.h>
 #include <libsolidity/codegen/MultiUseYulFunctionCollector.h>
-#include <libsolidity/codegen/ir/Common.h>
-/*
-	This file is part of solidity.
-
-	solidity is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-
-	solidity is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with solidity.  If not, see <http://www.gnu.org/licenses/>.
-*/
-// SPDX-License-Identifier: GPL-3.0
-/**
- * Component that can generate various useful Yul functions.
- */
-
-#include "libsolidity/ast/Types.h"
-#include <libsolidity/codegen/YulUtilFunctions.h>
-
-#include <libsolidity/ast/AST.h>
-#include <libsolidity/codegen/CompilerUtils.h>
-#include <libsolidity/codegen/MultiUseYulFunctionCollector.h>
-#include <libsolidity/codegen/ir/Common.h>
 
 #include <libsolutil/CommonData.h>
 #include <libsolutil/FunctionSelector.h>
@@ -64,124 +35,14 @@ using namespace solidity;
 using namespace solidity::util;
 using namespace solidity::frontend;
 
-string YulUtilFunctions::warpStorageWriteFunction(VariableDeclaration const& _declaration)
+string YulUtilFunctions::identityFunction()
 {
-	m_storageGenCount++;
-	solAssert(
-		_declaration.isStateVariable() or _declaration.referenceLocation() == VariableDeclaration::Storage,
-		"Write functions are supported only for storage variables.");
-	string functionName = IRNames::setterFunction(_declaration);
-	return m_functionCollector.createFunction(
-		functionName,
-		[&](vector<string>& _args, vector<string>&)
-		{
-			auto* type = _declaration.type();
-			unsigned argNo = 0;
-			while (true)
-			{
-				if (auto newType = dynamic_cast<ArrayType const*>(type))
-					type = newType->baseType();
-				else if (auto pMappingType = dynamic_cast<MappingType const*>(type))
-					type = pMappingType->valueType();
-				else
-					break;
-				_args.emplace_back("arg" + to_string(argNo));
-				++argNo;
-			}
-			_args.emplace_back("value");
-
-			std::string salt = to_string(m_storageGenCount + std::rand());
-			// mapping
-			string rendered;
-			if (_args.size() == 1)
-			{
-				rendered = Whiskers(R"(
-						value := add(value, <salt>)
-						let __warp_salt2 := add(<salt>, value)
-						revert(value, __warp_salt2)
-				)")("salt", salt)
-							   .render();
-			}
-			else if (_args.size() == 2)
-			{
-				rendered = Whiskers(R"(
-						<arg0> := add(<arg0>, <salt>)
-						value := add(value, <arg0>)
-						revert(value, <arg0>)
-				)")("salt", salt)("arg0", _args[0])
-							   .render();
-			}
-			else if (_args.size() == 3)
-			{
-				rendered = Whiskers(R"(
-						<arg0> := add(<arg0>, <salt>)
-						<arg1> := add(<arg0>, <arg1>)
-						value := add(value, <arg1>)
-						revert(value, <arg1>)
-				)")("salt", salt)("arg0", _args[0])("arg1", _args[1])
-							   .render();
-			}
-			return rendered;
-		});
-}
-
-string YulUtilFunctions::warpStorageReadFunction(VariableDeclaration const& _declaration)
-{
-	m_storageGenCount++;
-	solAssert(
-		_declaration.isStateVariable() or _declaration.referenceLocation() == VariableDeclaration::Storage,
-		"Read functions are supported only for storage variables.");
-	string functionName = IRNames::function(_declaration);
-	return m_functionCollector.createFunction(
-		functionName,
-		[&](vector<string>& _args, vector<string>& _returnParams)
-		{
-			auto* type = _declaration.type();
-			unsigned argNo = 0;
-			while (true)
-			{
-				if (auto newType = dynamic_cast<ArrayType const*>(type))
-					type = newType->baseType();
-				else if (auto pMappingType = dynamic_cast<MappingType const*>(type))
-					type = pMappingType->valueType();
-				else
-					break;
-				_args.emplace_back("arg" + to_string(argNo));
-				++argNo;
-			}
-			_returnParams.emplace_back("value");
-			std::string salt = to_string(m_storageGenCount + std::rand());
-			// mapping
-			string rendered;
-			if (_args.size() == 0)
-			{
-				rendered = Whiskers(R"(
-						value := add(value, <salt>)
-						revert(52, value)
-				)")("salt", salt)
-							   .render();
-			}
-			else if (_args.size() == 1)
-			{
-				rendered = Whiskers(R"(
-						<arg0> := add(<arg0>, <salt>)
-						value := add(value, <arg0>)
-						revert(value, <arg0>)
-				)")("salt", salt)("arg0", _args[0])
-							   .render();
-			}
-			else if (_args.size() == 2)
-			{
-				rendered = Whiskers(R"(
-						<arg0> := add(<arg0>, <salt>)
-						<arg1> := add(<arg0>, <arg1>)
-						value := add(value, <arg1>)
-						revert(value, <arg1>)
-				)")("salt", salt)("arg0", _args[0])("arg1", _args[1])
-							   .render();
-			}
-			return rendered;
-		});
+	string functionName = "identity";
+	return m_functionCollector.createFunction("identity", [&](vector<string>& _args, vector<string>& _rets) {
+		_args.push_back("value");
+		_rets.push_back("ret");
+		return "ret := value";
+	});
 }
 
 string YulUtilFunctions::combineExternalFunctionIdFunction()
@@ -2371,7 +2232,7 @@ string YulUtilFunctions::arrayDataAreaFunction(ArrayType const& _type)
 					</memory>
 					<?storage>
 						mstore(0, ptr)
-						data := keccak256(0, 0x20)
+						data := pedersen(0, 0x20)
 					</storage>
 				</dynamic>
 			}
@@ -2715,7 +2576,7 @@ string YulUtilFunctions::mappingIndexAccessFunction(MappingType const& _mappingT
 				function <functionName>(slot <key>) -> dataSlot {
 					mstore(0, <convertedKey>)
 					mstore(0x20, slot)
-					dataSlot := keccak256(0, 0x40)
+					dataSlot := pedersen(0, 0x40)
 				}
 			)");
 				templ("functionName", functionName);

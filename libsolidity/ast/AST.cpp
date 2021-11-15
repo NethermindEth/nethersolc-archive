@@ -862,11 +862,6 @@ ReturnAnnotation& Return::annotation() const
 	return initAnnotation<ReturnAnnotation>();
 }
 
-IndexAccessAnnotation& IndexAccess::annotation() const
-{
-	return initAnnotation<IndexAccessAnnotation>();
-}
-
 ExpressionAnnotation& Expression::annotation() const
 {
 	return initAnnotation<ExpressionAnnotation>();

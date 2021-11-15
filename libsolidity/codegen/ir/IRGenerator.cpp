@@ -503,7 +503,183 @@ string IRGenerator::generateFunctionWithModifierInner(FunctionDefinition const& 
 
 string IRGenerator::generateGetter(VariableDeclaration const& _varDecl)
 {
-	return m_context.utils().warpStorageReadFunction(_varDecl);
+	string functionName = IRNames::function(_varDecl);
+	return m_context.functionCollector().createFunction(functionName, [&]() {
+		Type const* type = _varDecl.annotation().type;
+
+		solAssert(_varDecl.isStateVariable(), "");
+
+		FunctionType accessorType(_varDecl);
+		TypePointers paramTypes = accessorType.parameterTypes();
+		if (_varDecl.immutable())
+		{
+			solAssert(paramTypes.empty(), "");
+			solUnimplementedAssert(type->sizeOnStack() == 1, "");
+			return Whiskers(R"(
+				/// @ast-id <astID>
+				<sourceLocationComment>
+				function <functionName>() -> rval {
+					rval := loadimmutable("<id>")
+				}
+				<contractSourceLocationComment>
+			)")
+			("astID", to_string(_varDecl.id()))
+			("sourceLocationComment", dispenseLocationComment(_varDecl))
+			(
+				"contractSourceLocationComment",
+				dispenseLocationComment(m_context.mostDerivedContract())
+			)
+			("functionName", functionName)
+			("id", to_string(_varDecl.id()))
+			.render();
+		}
+		else if (_varDecl.isConstant())
+		{
+			solAssert(paramTypes.empty(), "");
+			return Whiskers(R"(
+				/// @ast-id <astID>
+				<sourceLocationComment>
+				function <functionName>() -> <ret> {
+					<ret> := <constantValueFunction>()
+				}
+				<contractSourceLocationComment>
+			)")
+			("astID", to_string(_varDecl.id()))
+			("sourceLocationComment", dispenseLocationComment(_varDecl))
+			(
+				"contractSourceLocationComment",
+				dispenseLocationComment(m_context.mostDerivedContract())
+			)
+			("functionName", functionName)
+			("constantValueFunction", IRGeneratorForStatements(m_context, m_utils).constantValueFunction(_varDecl))
+			("ret", suffixedVariableNameList("ret_", 0, _varDecl.type()->sizeOnStack()))
+			.render();
+		}
+
+		string code;
+
+		auto const& location = m_context.storageLocationOfStateVariable(_varDecl);
+		code += Whiskers(R"(
+			let slot := <slot>
+			let offset := <offset>
+		)")
+		("slot", location.first.str())
+		("offset", to_string(location.second))
+		.render();
+
+		if (!paramTypes.empty())
+			solAssert(
+				location.second == 0,
+				"If there are parameters, we are dealing with structs or mappings and thus should have offset zero."
+			);
+
+		// The code of an accessor is of the form `x[a][b][c]` (it is slightly more complicated
+		// if the final type is a struct).
+		// In each iteration of the loop below, we consume one parameter, perform an
+		// index access, reassign the yul variable `slot` and move @a currentType further "down".
+		// The initial value of @a currentType is only used if we skip the loop completely.
+		Type const* currentType = _varDecl.annotation().type;
+
+		vector<string> parameters;
+		vector<string> returnVariables;
+
+		for (size_t i = 0; i < paramTypes.size(); ++i)
+		{
+			MappingType const* mappingType = dynamic_cast<MappingType const*>(currentType);
+			ArrayType const* arrayType = dynamic_cast<ArrayType const*>(currentType);
+			solAssert(mappingType || arrayType, "");
+
+			vector<string> keys = IRVariable("key_" + to_string(i),
+				mappingType ? *mappingType->keyType() : *TypeProvider::uint256()
+			).stackSlots();
+			parameters += keys;
+
+			Whiskers templ(R"(
+				<?array>
+					if iszero(lt(<keys>, <length>(slot))) { revert(0, 0) }
+				</array>
+				slot<?array>, offset</array> := <indexAccess>(slot<?+keys>, <keys></+keys>)
+			)");
+			templ(
+				"indexAccess",
+				mappingType ?
+				m_utils.mappingIndexAccessFunction(*mappingType, *mappingType->keyType()) :
+				m_utils.storageArrayIndexAccessFunction(*arrayType)
+			)
+			("array", arrayType != nullptr)
+			("keys", joinHumanReadable(keys));
+			if (arrayType)
+				templ("length", m_utils.arrayLengthFunction(*arrayType));
+
+			code += templ.render();
+
+			currentType = mappingType ? mappingType->valueType() : arrayType->baseType();
+		}
+
+		auto returnTypes = accessorType.returnParameterTypes();
+		solAssert(returnTypes.size() >= 1, "");
+		if (StructType const* structType = dynamic_cast<StructType const*>(currentType))
+		{
+			solAssert(location.second == 0, "");
+			auto const& names = accessorType.returnParameterNames();
+			for (size_t i = 0; i < names.size(); ++i)
+			{
+				if (returnTypes[i]->category() == Type::Category::Mapping)
+					continue;
+				if (
+					auto const* arrayType = dynamic_cast<ArrayType const*>(returnTypes[i]);
+					arrayType && !arrayType->isByteArray()
+				)
+					continue;
+
+				pair<u256, unsigned> const& offsets = structType->storageOffsetsOfMember(names[i]);
+				vector<string> retVars = IRVariable("ret_" + to_string(returnVariables.size()), *returnTypes[i]).stackSlots();
+				returnVariables += retVars;
+				code += Whiskers(R"(
+					<ret> := <readStorage>(add(slot, <slotOffset>))
+				)")
+				("ret", joinHumanReadable(retVars))
+				("readStorage", m_utils.readFromStorage(*returnTypes[i], offsets.second, true))
+				("slotOffset", offsets.first.str())
+				.render();
+			}
+		}
+		else
+		{
+			solAssert(returnTypes.size() == 1, "");
+			auto const* arrayType = dynamic_cast<ArrayType const*>(returnTypes.front());
+			if (arrayType)
+				solAssert(arrayType->isByteArray(), "");
+			vector<string> retVars = IRVariable("ret", *returnTypes.front()).stackSlots();
+			returnVariables += retVars;
+			code += Whiskers(R"(
+				<ret> := <readStorage>(slot, offset)
+			)")
+			("ret", joinHumanReadable(retVars))
+			("readStorage", m_utils.readFromStorageDynamic(*returnTypes.front(), true))
+			.render();
+		}
+
+		return Whiskers(R"(
+			/// @ast-id <astID>
+			<sourceLocationComment>
+			function <functionName>(<params>) -> <retVariables> {
+				<code>
+			}
+			<contractSourceLocationComment>
+		)")
+		("functionName", functionName)
+		("params", joinHumanReadable(parameters))
+		("retVariables", joinHumanReadable(returnVariables))
+		("code", std::move(code))
+		("astID", to_string(_varDecl.id()))
+		("sourceLocationComment", dispenseLocationComment(_varDecl))
+		(
+			"contractSourceLocationComment",
+			dispenseLocationComment(m_context.mostDerivedContract())
+		)
+		.render();
+	});
 }
 
 string IRGenerator::generateInitialAssignment(VariableDeclaration const& _varDecl)

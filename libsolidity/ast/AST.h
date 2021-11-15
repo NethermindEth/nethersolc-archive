@@ -2177,7 +2177,6 @@ public:
 
 	Expression const& baseExpression() const { return *m_base; }
 	Expression const* indexExpression() const { return m_index.get(); }
-	IndexAccessAnnotation& annotation() const override;
 
 private:
 	ASTPointer<Expression> m_base;
