@@ -13,38 +13,19 @@ jobs:
       matrix:
         config:
           - os: ubuntu-latest
-          - os: macos-10.15
-
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
 
+      - name: Set up GCC
+        uses: egor-tensin/setup-gcc@v1
+        with:
+            version: 11
+
       - name: Install dependencies
         run: |
           ./scripts/install_deps.sh
-
-      - name: Install evmone (linux)
-        run: |
-          mkdir -p deps
-          cd deps
-          wget https://github.com/ethereum/evmone/releases/download/v0.8.0/evmone-0.8.0-linux-x86_64.tar.gz
-          tar -xvzf evmone-0.8.0-linux-x86_64.tar.gz
-          cd ..
-          sudo apt-get -y install cvc4 z3
-        if: matrix.config.os == 'ubuntu-latest'
-
-      - name: Install evmone (macos)
-        run: |
-          mkdir -p deps
-          cd deps
-          wget https://github.com/ethereum/evmone/releases/download/v0.8.0/evmone-0.8.0-darwin-x86_64.tar.gz
-          tar -xvzf evmone-0.8.0-darwin-x86_64.tar.gz
-          cd ..
-          brew install z3
-          brew tap cvc4/cvc4
-          brew install cvc4/cvc4/cvc4
-        if: matrix.config.os == 'macos-10.15'
 
       - name: Gen Cache Id
         run: |
@@ -54,14 +35,18 @@ jobs:
       - name: Cache build
         uses: actions/cache@v2
         with:
-          # npm cache files are stored in `~/.npm` on Linux/macOS
           path: build
           key: ${{ matrix.config.os }}-build-${{ steps.cache-id.outputs.timestamp }}
           restore-keys: |
-            ${{ matrix.conig.os }}-build-
+            ${{ matrix.config.os }}-build-
 
       - name: Build
         run: |
-          mkdir build
-          cd build
-          TERM=dumb cmake .. && make
+          mkdir -p build && cd build
+          cmake .. && make solc -j$(nproc)
+
+      - name: Upload the solc artifact
+        uses: actions/upload-artifact@v2
+        with:
+            name: solc
+            path: build/solc/solc
