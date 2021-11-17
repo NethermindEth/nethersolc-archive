@@ -981,7 +981,7 @@ string IRGenerator::dispatchRoutine(ContractDefinition const& _contract)
 	if (etherReceiver)
 	{
 		solAssert(!_contract.isLibrary(), "");
-		t("receiveEther", m_context.enqueueFunctionForCodeGeneration(*etherReceiver) + "() stop()");
+		t("receiveEther", m_context.enqueueFunctionForCodeGeneration(*etherReceiver) + "() return(0,0)");
 	}
 	else
 		t("receiveEther", "");
@@ -992,7 +992,7 @@ string IRGenerator::dispatchRoutine(ContractDefinition const& _contract)
 		if (!fallback->isPayable())
 			fallbackCode += callValueCheck() + "\n";
 		if (fallback->parameters().empty())
-			fallbackCode += m_context.enqueueFunctionForCodeGeneration(*fallback) + "() stop()";
+			fallbackCode += m_context.enqueueFunctionForCodeGeneration(*fallback) + "() return(0,0)";
 		else
 		{
 			solAssert(fallback->parameters().size() == 1 && fallback->returnParameters().size() == 1, "");
