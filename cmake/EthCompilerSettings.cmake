@@ -50,8 +50,8 @@ if (("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU") OR ("${CMAKE_CXX_COMPILER_ID}" MA
 	add_compile_options(-Werror)
 	add_compile_options(-pedantic)
 	add_compile_options(-Wmissing-declarations)
-	add_compile_options(-Wno-unknown-pragmas)
 	add_compile_options(-Wimplicit-fallthrough)
+        add_compile_options(-Wno-uninitialized)
 	add_compile_options(-Wsign-conversion)
 	add_compile_options(-Wconversion)
 
