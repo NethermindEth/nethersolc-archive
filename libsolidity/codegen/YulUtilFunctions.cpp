@@ -4489,7 +4489,7 @@ string YulUtilFunctions::extractReturndataFunction()
 
 string YulUtilFunctions::copyConstructorArgumentsToMemoryFunction(
 	ContractDefinition const& _contract,
-	string const& _creationObjectName
+	[[maybe_unused]] string const& _creationObjectName
 )
 {
 	string functionName = "copy_arguments_for_constructor_" +
@@ -4505,20 +4505,12 @@ string YulUtilFunctions::copyConstructorArgumentsToMemoryFunction(
 
 		return util::Whiskers(R"(
 			function <functionName>() -> <retParams> {
-				let programSize := datasize("<object>")
-				let argSize := sub(codesize(), programSize)
-
-				let memoryDataOffset := <allocate>(argSize)
-				codecopy(memoryDataOffset, programSize, argSize)
-
-				<retParams> := <abiDecode>(memoryDataOffset, add(memoryDataOffset, argSize))
+				<retParams> := <abiDecode>(0, calldatasize())
 			}
 		)")
 		("functionName", functionName)
 		("retParams", returnParams)
-		("object", _creationObjectName)
-		("allocate", allocationFunction())
-		("abiDecode", abiFunctions.tupleDecoder(FunctionType(*_contract.constructor()).parameterTypes(), true))
+		("abiDecode", abiFunctions.tupleDecoder(FunctionType(*_contract.constructor()).parameterTypes()))
 		.render();
 	});
 }
