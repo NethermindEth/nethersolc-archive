@@ -2462,7 +2462,6 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 			<?+retVars> <retVars> := </+retVars> <abiDecode>(<pos>, add(<pos>, <returnSize>))
 		}
 	)");
-	templ("revertNoCode", m_utils.revertReasonIfDebugFunction("Target contract does not contain code"));
 	templ("pos", m_context.newYulVariable());
 	templ("end", m_context.newYulVariable());
 	if (_functionCall.annotation().tryCall)
