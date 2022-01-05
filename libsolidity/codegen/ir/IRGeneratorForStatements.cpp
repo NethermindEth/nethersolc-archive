@@ -2502,8 +2502,6 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 			<?+retVars> <retVars> := </+retVars> <abiDecode>(<pos>, add(<pos>, <returnSize>))
 		}
 	)");
-	templ("revertNoCode", m_utils.revertReasonIfDebugFunction("Target contract does not contain code"));
-
 	// We do not need to check extcodesize if we expect return data: If there is no
 	// code, the call will return empty data and the ABI decoder will revert.
 	size_t encodedHeadSize = 0;
@@ -2513,7 +2511,6 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 		encodedHeadSize == 0 ||
 		!m_context.evmVersion().supportsReturndata() ||
 		m_context.revertStrings() >= RevertStrings::Debug;
-	templ("checkExtcodesize", checkExtcodesize);
 
 	templ("pos", m_context.newYulVariable());
 	templ("end", m_context.newYulVariable());
