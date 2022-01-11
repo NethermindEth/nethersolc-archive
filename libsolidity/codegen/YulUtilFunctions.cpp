@@ -3298,7 +3298,7 @@ string YulUtilFunctions::conversionFunction(Type const& _from, Type const& _to)
 			if (toCategory == Type::Category::Address || toCategory == Type::Category::Contract)
 				body =
 					Whiskers("converted := <convert>(value)")
-					("convert", conversionFunction(_from, IntegerType(160)))
+					("convert", conversionFunction(_from, IntegerType(256)))
 					.render();
 			else
 			{
