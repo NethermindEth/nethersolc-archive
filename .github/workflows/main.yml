@@ -24,8 +24,11 @@ jobs:
             version: 11
 
       - name: Install dependencies
-        run: |
-          ./scripts/install_deps.sh
+        run: >
+            sudo apt-get -y update
+
+            sudo apt-get -y install build-essential cmake git
+            libboost-all-dev
 
       - name: Gen Cache Id
         run: |
@@ -43,7 +46,7 @@ jobs:
       - name: Build
         run: |
           mkdir -p build && cd build
-          cmake .. && make solc -j$(nproc)
+          cmake -DUSE_Z3=OFF .. && make solc -j$(nproc)
 
       - name: Upload the solc artifact
         uses: actions/upload-artifact@v2
