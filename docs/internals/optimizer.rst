@@ -275,7 +275,7 @@ The following transformation steps are the main components:
 - Common Subexpression Eliminator
 - Expression Simplifier
 - Redundant Assign Eliminator
-- Full Function Inliner
+- Full Inliner
 
 Optimizer Steps
 ---------------
@@ -297,7 +297,8 @@ on the individual steps and their sequence below.
 - :ref:`for-loop-condition-into-body`.
 - :ref:`for-loop-condition-out-of-body`.
 - :ref:`for-loop-init-rewriter`.
-- :ref:`functional-inliner`.
+- :ref:`expression-inliner`.
+- :ref:`full-inliner`.
 - :ref:`function-grouper`.
 - :ref:`function-hoister`.
 - :ref:`function-specializer`.
@@ -428,11 +429,9 @@ is transformed to
 
 .. code-block:: text
 
-    {
-        Init...
-        for {} C { Post... } {
-            Body...
-        }
+    Init...
+    for {} C { Post... } {
+        Body...
     }
 
 This eases the rest of the optimization process because we can ignore
@@ -522,7 +521,7 @@ ExpressionSplitter
 
 The expression splitter turns expressions like ``add(mload(0x123), mul(mload(0x456), 0x20))``
 into a sequence of declarations of unique variables that are assigned sub-expressions
-of that expression so that each function call has only variables or literals
+of that expression so that each function call has only variables
 as arguments.
 
 The above would be transformed into
@@ -530,10 +529,13 @@ The above would be transformed into
 .. code-block:: yul
 
     {
-        let _1 := mload(0x123)
-        let _2 := mul(_1, 0x20)
-        let _3 := mload(0x456)
-        let z := add(_3, _2)
+        let _1 := 0x20
+        let _2 := 0x456
+        let _3 := mload(_2)
+        let _4 := mul(_3, _1)
+        let _5 := 0x123
+        let _6 := mload(_5)
+        let z := add(_6, _4)
     }
 
 Note that this transformation does not change the order of opcodes or function calls.
@@ -544,7 +546,7 @@ this "outlining" of the inner expressions in all cases. We can sidestep this lim
 
 The final program should be in a form such that (with the exception of loop conditions)
 function calls cannot appear nested inside expressions
-and all function call arguments have to be literals or variables.
+and all function call arguments have to be variables.
 
 The benefits of this form are that it is much easier to re-order the sequence of opcodes
 and it is also easier to perform function call inlining. Furthermore, it is simpler
@@ -973,15 +975,19 @@ BlockFlattener
 ^^^^^^^^^^^^^^
 
 This stage eliminates nested blocks by inserting the statement in the
-inner block at the appropriate place in the outer block:
+inner block at the appropriate place in the outer block. It depends on the
+FunctionGrouper and does not flatten the outermost block to keep the form
+produced by the FunctionGrouper.
 
 .. code-block:: yul
 
     {
-        let x := 2
         {
-            let y := 3
-            mstore(x, y)
+            let x := 2
+            {
+                let y := 3
+                mstore(x, y)
+            }
         }
     }
 
@@ -990,9 +996,11 @@ is transformed to
 .. code-block:: yul
 
     {
-        let x := 2
-        let y := 3
-        mstore(x, y)
+        {
+            let x := 2
+            let y := 3
+            mstore(x, y)
+        }
     }
 
 As long as the code is disambiguated, this does not cause a problem because
@@ -1082,9 +1090,9 @@ The actual removal of the function is performed by the Unused Pruner.
 Function Inlining
 -----------------
 
-.. _functional-inliner:
+.. _expression-inliner:
 
-FunctionalInliner
+ExpressionInliner
 ^^^^^^^^^^^^^^^^^
 
 This component of the optimizer performs restricted function inlining by inlining functions that can be
@@ -1107,12 +1115,12 @@ The result of this inlining is always a single expression.
 
 This component can only be used on sources with unique names.
 
-.. _full-function-inliner:
+.. _full-inliner:
 
-FullFunctionInliner
-^^^^^^^^^^^^^^^^^^^
+FullInliner
+^^^^^^^^^^^
 
-The Full Function Inliner replaces certain calls of certain functions
+The Full Inliner replaces certain calls of certain functions
 by the function's body. This is not very helpful in most cases, because
 it just increases the code size but does not have a benefit. Furthermore,
 code is usually very expensive and we would often rather have shorter

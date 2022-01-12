@@ -1124,6 +1124,8 @@ public:
 	bool containsNestedMapping() const override
 	{
 		solAssert(nameable(), "Called for a non nameable type.");
+		// DeclarationTypeChecker::endVisit(VariableDeclaration const&)
+		// assumes that this will never be true.
 		solAssert(!underlyingType().containsNestedMapping(), "");
 		return false;
 	}
@@ -1141,7 +1143,7 @@ public:
 	}
 
 	std::string toString(bool _short) const override;
-	std::string canonicalName() const override { solAssert(false, ""); }
+	std::string canonicalName() const override;
 	std::string signatureInExternalFunction(bool) const override { solAssert(false, ""); }
 
 protected:
@@ -1235,6 +1237,7 @@ public:
 		ABIEncode,
 		ABIEncodePacked,
 		ABIEncodeWithSelector,
+		ABIEncodeCall,
 		ABIEncodeWithSignature,
 		ABIDecode,
 		GasLeft, ///< gasleft()

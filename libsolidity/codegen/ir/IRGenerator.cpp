@@ -96,7 +96,12 @@ pair<string, string> IRGenerator::run(
 	string sourceName = *_contract.location().sourceName;
 	string const ir = yul::reindent(generate(_contract, _cborMetadata, _otherYulSources));
 
-	yul::AssemblyStack asmStack(m_evmVersion, yul::AssemblyStack::Language::StrictAssembly, m_optimiserSettings);
+	yul::AssemblyStack asmStack(
+		m_evmVersion,
+		yul::AssemblyStack::Language::StrictAssembly,
+		m_optimiserSettings,
+		m_context.debugInfoSelection()
+	);
 	if (!asmStack.parseAndAnalyze(sourceName, ir))
 	{
 		string errorMessage;
@@ -341,8 +346,7 @@ string IRGenerator::generateFunction(FunctionDefinition const& _function)
 	return m_context.functionCollector().createFunction(functionName, [&]() {
 		m_context.resetLocalVariables();
 		Whiskers t(R"(
-			/// @ast-id <astID>
-			<sourceLocationComment>
+			<astIDComment><sourceLocationComment>
 			function <functionName>(<params>)<?+retParams> -> <retParams></+retParams> {
 				<retInit>
 				<body>
@@ -350,7 +354,10 @@ string IRGenerator::generateFunction(FunctionDefinition const& _function)
 			<contractSourceLocationComment>
 		)");
 
-		t("astID", to_string(_function.id()));
+		if (m_context.debugInfoSelection().astID)
+			t("astIDComment", "/// @ast-id " + to_string(_function.id()) + "\n");
+		else
+			t("astIDComment", "");
 		t("sourceLocationComment", dispenseLocationComment(_function));
 		t(
 			"contractSourceLocationComment",
@@ -410,8 +417,7 @@ string IRGenerator::generateModifier(
 	return m_context.functionCollector().createFunction(functionName, [&]() {
 		m_context.resetLocalVariables();
 		Whiskers t(R"(
-			/// @ast-id <astID>
-			<sourceLocationComment>
+			<astIDComment><sourceLocationComment>
 			function <functionName>(<params>)<?+retParams> -> <retParams></+retParams> {
 				<assignRetParams>
 				<evalArgs>
@@ -419,6 +425,7 @@ string IRGenerator::generateModifier(
 			}
 			<contractSourceLocationComment>
 		)");
+
 		t("functionName", functionName);
 		vector<string> retParamsIn;
 		for (auto const& varDecl: _function.returnParameters())
@@ -432,7 +439,7 @@ string IRGenerator::generateModifier(
 		for (size_t i = 0; i < retParamsIn.size(); ++i)
 		{
 			retParams.emplace_back(m_context.newYulVariable());
-			assignRetParams += retParams.back() + " := " + retParamsIn[i] + "\n";
+			assignRetParams += retParams.at(i) + " := " + retParamsIn.at(i) + "\n";
 		}
 		t("retParams", joinHumanReadable(retParams));
 		t("assignRetParams", assignRetParams);
@@ -441,7 +448,11 @@ string IRGenerator::generateModifier(
 			_modifierInvocation.name().annotation().referencedDeclaration
 		);
 		solAssert(modifier, "");
-		t("astID", to_string(modifier->id()));
+
+		if (m_context.debugInfoSelection().astID)
+			t("astIDComment", "/// @ast-id " + to_string(modifier->id()) + "\n");
+		else
+			t("astIDComment", "");
 		t("sourceLocationComment", dispenseLocationComment(*modifier));
 		t(
 			"contractSourceLocationComment",
@@ -519,7 +530,7 @@ string IRGenerator::generateFunctionWithModifierInner(FunctionDefinition const& 
 		for (size_t i = 0; i < retParams.size(); ++i)
 		{
 			retParamsIn.emplace_back(m_context.newYulVariable());
-			assignRetParams += retParams.back() + " := " + retParamsIn[i] + "\n";
+			assignRetParams += retParams.at(i) + " := " + retParamsIn.at(i) + "\n";
 		}
 		vector<string> params = retParamsIn;
 		for (auto const& varDecl: _function.parameters())
@@ -545,16 +556,20 @@ string IRGenerator::generateGetter(VariableDeclaration const& _varDecl)
 		if (_varDecl.immutable())
 		{
 			solAssert(paramTypes.empty(), "");
-			solUnimplementedAssert(type->sizeOnStack() == 1, "");
+			solUnimplementedAssert(type->sizeOnStack() == 1);
 			return Whiskers(R"(
-				/// @ast-id <astID>
-				<sourceLocationComment>
+				<astIDComment><sourceLocationComment>
 				function <functionName>() -> rval {
 					rval := loadimmutable("<id>")
 				}
 				<contractSourceLocationComment>
 			)")
-			("astID", to_string(_varDecl.id()))
+			(
+				"astIDComment",
+				m_context.debugInfoSelection().astID ?
+					"/// @ast-id " + to_string(_varDecl.id()) + "\n" :
+					""
+			)
 			("sourceLocationComment", dispenseLocationComment(_varDecl))
 			(
 				"contractSourceLocationComment",
@@ -568,14 +583,18 @@ string IRGenerator::generateGetter(VariableDeclaration const& _varDecl)
 		{
 			solAssert(paramTypes.empty(), "");
 			return Whiskers(R"(
-				/// @ast-id <astID>
-				<sourceLocationComment>
+				<astIDComment><sourceLocationComment>
 				function <functionName>() -> <ret> {
 					<ret> := <constantValueFunction>()
 				}
 				<contractSourceLocationComment>
 			)")
-			("astID", to_string(_varDecl.id()))
+			(
+				"astIDComment",
+				m_context.debugInfoSelection().astID ?
+					"/// @ast-id " + to_string(_varDecl.id()) + "\n" :
+					""
+			)
 			("sourceLocationComment", dispenseLocationComment(_varDecl))
 			(
 				"contractSourceLocationComment",
@@ -692,8 +711,7 @@ string IRGenerator::generateGetter(VariableDeclaration const& _varDecl)
 		}
 
 		return Whiskers(R"(
-			/// @ast-id <astID>
-			<sourceLocationComment>
+			<astIDComment><sourceLocationComment>
 			function <functionName>(<params>) -> <retVariables> {
 				<code>
 			}
@@ -703,7 +721,12 @@ string IRGenerator::generateGetter(VariableDeclaration const& _varDecl)
 		("params", joinHumanReadable(parameters))
 		("retVariables", joinHumanReadable(returnVariables))
 		("code", std::move(code))
-		("astID", to_string(_varDecl.id()))
+		(
+			"astIDComment",
+			m_context.debugInfoSelection().astID ?
+				"/// @ast-id " + to_string(_varDecl.id()) + "\n" :
+				""
+		)
 		("sourceLocationComment", dispenseLocationComment(_varDecl))
 		(
 			"contractSourceLocationComment",
@@ -830,7 +853,7 @@ void IRGenerator::generateConstructors(ContractDefinition const& _contract)
 				for (ASTPointer<VariableDeclaration> const& varDecl: contract->constructor()->parameters())
 					params += m_context.addLocalVariable(*varDecl).stackSlots();
 
-			if (contract->constructor())
+			if (m_context.debugInfoSelection().astID && contract->constructor())
 				t("astIDComment", "/// @ast-id " + to_string(contract->constructor()->id()) + "\n");
 			else
 				t("astIDComment", "");
@@ -920,8 +943,8 @@ string IRGenerator::deployCode(ContractDefinition const& _contract)
 	else
 		for (VariableDeclaration const* immutable: ContractType(_contract).immutableVariables())
 		{
-			solUnimplementedAssert(immutable->type()->isValueType(), "");
-			solUnimplementedAssert(immutable->type()->sizeOnStack() == 1, "");
+			solUnimplementedAssert(immutable->type()->isValueType());
+			solUnimplementedAssert(immutable->type()->sizeOnStack() == 1);
 			immutables.emplace_back(map<string, string>{
 				{"immutableName"s, to_string(immutable->id())},
 				{"value"s, "mload(" + to_string(m_context.immutableMemoryOffset(*immutable)) + ")"}
@@ -939,7 +962,7 @@ string IRGenerator::callValueCheck()
 string IRGenerator::dispatchRoutine(ContractDefinition const& _contract)
 {
 	Whiskers t(R"X(
-		if iszero(lt(calldatasize(), 4))
+		<?+cases>if iszero(lt(calldatasize(), 4))
 		{
 			let selector := <shr224>(calldataload(0))
 			switch selector
@@ -956,8 +979,8 @@ string IRGenerator::dispatchRoutine(ContractDefinition const& _contract)
 			}
 			</cases>
 			default {}
-		}
-		if iszero(calldatasize()) { <receiveEther> }
+		}</+cases>
+		<?+receiveEther>if iszero(calldatasize()) { <receiveEther> }</+receiveEther>
 		<fallback>
 	)X");
 	t("shr224", m_utils.shiftRightFunction(224));
@@ -1039,9 +1062,6 @@ string IRGenerator::dispatchRoutine(ContractDefinition const& _contract)
 
 string IRGenerator::memoryInit(bool _useMemoryGuard)
 {
-	// TODO: Remove once we have made sure it is safe, i.e. after "Yul memory objects lite".
-	//       Also restore the tests removed in the commit that adds this comment.
-	_useMemoryGuard = false;
 	// This function should be called at the beginning of the EVM call frame
 	// and thus can assume all memory to be zero, including the contents of
 	// the "zero memory area" (the position CompilerUtils::zeroPointer points to).
@@ -1078,6 +1098,7 @@ void IRGenerator::resetContext(ContractDefinition const& _contract, ExecutionCon
 		m_context.revertStrings(),
 		m_optimiserSettings,
 		m_context.sourceIndices(),
+		m_context.debugInfoSelection(),
 		m_context.soliditySourceProvider()
 	);
 	newContext.copyFunctionIDsFrom(m_context);

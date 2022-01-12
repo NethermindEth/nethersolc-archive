@@ -59,6 +59,13 @@ struct SourceLocation
 		return start <= _other.start && _other.end <= end;
 	}
 
+	bool containsOffset(int _pos) const
+	{
+		if (!hasText() || _pos < 0)
+			return false;
+		return start <= _pos && _pos < end;
+	}
+
 	bool intersects(SourceLocation const& _other) const
 	{
 		if (!hasText() || !_other.hasText() || !equalSources(_other))
@@ -111,5 +118,24 @@ SourceLocation parseSourceLocation(
 
 /// Stream output for Location (used e.g. in boost exceptions).
 std::ostream& operator<<(std::ostream& _out, SourceLocation const& _location);
+
+
+/**
+ * Alternative, line-column-based representation for source locations.
+ * Both line and column are zero-based.
+ * If used as a range, the second location is considered exclusive.
+ * Negative values are invalid.
+ */
+struct LineColumn
+{
+	/// Line value, can be between zero and number of `\n` characters in the source file.
+	int line = -1;
+	/// Column value, can be between zero and number of characters in the line (inclusive).
+	int column = -1;
+
+	LineColumn() = default;
+	explicit LineColumn(int _line, int _column): line(_line), column(_column) {}
+};
+
 
 }

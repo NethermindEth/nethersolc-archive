@@ -308,7 +308,18 @@ Input Description
           // "strip" removes all revert strings (if possible, i.e. if literals are used) keeping side-effects
           // "debug" injects strings for compiler-generated internal reverts, implemented for ABI encoders V1 and V2 for now.
           // "verboseDebug" even appends further information to user-supplied revert strings (not yet implemented)
-          "revertStrings": "default"
+          "revertStrings": "default",
+          // Optional: How much extra debug information to include in comments in the produced EVM
+          // assembly and Yul code. Available components are:
+          // - `location`: Annotations of the form `@src <index>:<start>:<end>` indicating the
+          //    location of the corresponding element in the original Solidity file, where:
+          //     - `<index>` is the file index matching the `@use-src` annotation,
+          //     - `<start>` is the index of the first byte at that location,
+          //     - `<end>` is the index of the first byte after that location.
+          // - `snippet`: A single-line code snippet from the location indicated by `@src`.
+          //     The snippet is quoted and follows the corresponding `@src` annotation.
+          // - `*`: Wildcard value that can be used to request everything.
+          "debugInfo": ["location", "snippet"]
         },
         // Metadata settings (optional)
         "metadata": {
@@ -407,6 +418,8 @@ Input Description
           "divModWithSlacks": true,
           // Choose which model checker engine to use: all (default), bmc, chc, none.
           "engine": "chc",
+          // Choose which types of invariants should be reported to the user: contract, reentrancy.
+          "invariants": ["contract", "reentrancy"],
           // Choose whether to output all unproved targets. The default is `false`.
           "showUnproved": true,
           // Choose which solvers should be used, if available.

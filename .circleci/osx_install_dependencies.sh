@@ -52,22 +52,20 @@ function validate_checksum {
 
 if [ ! -f /usr/local/lib/libz3.a ] # if this file does not exists (cache was not restored), rebuild dependencies
 then
-  git -C /usr/local/Homebrew/Library/Taps/homebrew/homebrew-core fetch --unshallow
-  git -C /usr/local/Homebrew/Library/Taps/homebrew/homebrew-cask fetch --unshallow
-  brew update
   brew unlink python
   brew install boost
   brew install cmake
   brew install wget
   brew install coreutils
+  brew install diffutils
   ./scripts/install_obsolete_jsoncpp_1_7_4.sh
 
   # z3
-  z3_version="4.8.12"
-  z3_dir="z3-${z3_version}-x64-osx-10.15.7"
+  z3_version="4.8.13"
+  z3_dir="z3-${z3_version}-x64-osx-10.16"
   z3_package="${z3_dir}.zip"
   wget "https://github.com/Z3Prover/z3/releases/download/z3-${z3_version}/${z3_package}"
-  validate_checksum "$z3_package" a1f6ef3c99456147c4d3f2652dc6bc90951c4ab3fe7741a255eb794f0ab8938c
+  validate_checksum "$z3_package" 191b26be2b617b2dffffce139d77abcd7e584859efbc10a58d01a1d7830697a4
   unzip "$z3_package"
   rm "$z3_package"
   cp "${z3_dir}/bin/libz3.a" /usr/local/lib

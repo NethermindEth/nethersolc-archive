@@ -66,7 +66,7 @@ Shifts
 ^^^^^^
 
 The result of a shift operation has the type of the left operand, truncating the result to match the type.
-The right operand must be of unsigned type, trying to shift by an signed type will produce a compilation error.
+The right operand must be of unsigned type, trying to shift by a signed type will produce a compilation error.
 
 Shifts can be "simulated" using multiplication by powers of two in the following way. Note that the truncation
 to the type of the left operand is always performed at the end, but not mentioned explicitly.
@@ -241,7 +241,7 @@ and to send Ether (in units of wei) to a payable address using the ``transfer`` 
 .. code-block:: solidity
     :force:
 
-    address payable x = address(0x123);
+    address payable x = payable(0x123);
     address myAddress = address(this);
     if (x.balance < 10 && myAddress.balance >= 10) x.transfer(10);
 
@@ -437,14 +437,16 @@ an error. You can prepend (for integer types) or append (for bytesNN types) zero
 Rational and Integer Literals
 -----------------------------
 
-Integer literals are formed from a sequence of numbers in the range 0-9.
+Integer literals are formed from a sequence of digits in the range 0-9.
 They are interpreted as decimals. For example, ``69`` means sixty nine.
 Octal literals do not exist in Solidity and leading zeros are invalid.
 
-Decimal fraction literals are formed by a ``.`` with at least one number on
+Decimal fractional literals are formed by a ``.`` with at least one number on
 one side.  Examples include ``1.``, ``.1`` and ``1.3``.
 
-Scientific notation is also supported, where the base can have fractions and the exponent cannot.
+Scientific notation in the form of ``2e10`` is also supported, where the
+mantissa can be fractional but the exponent has to be an integer.
+The literal ``MeE`` is equivalent to ``M * 10**E``.
 Examples include ``2e10``, ``-2e10``, ``2e-10``, ``2.5e1``.
 
 Underscores can be used to separate the digits of a numeric literal to aid readability.
@@ -507,7 +509,7 @@ String literals are written with either double or single-quotes (``"foo"`` or ``
 
 For example, with ``bytes32 samevar = "stringliteral"`` the string literal is interpreted in its raw byte form when assigned to a ``bytes32`` type.
 
-String literals can only contain printable ASCII characters, which means the characters between and including 0x1F .. 0x7E.
+String literals can only contain printable ASCII characters, which means the characters between and including 0x20 .. 0x7E.
 
 Additionally, string literals also support the following escape characters:
 

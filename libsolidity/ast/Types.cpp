@@ -41,7 +41,6 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/split.hpp>
-#include <boost/range/algorithm/copy.hpp>
 
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/reverse.hpp>
@@ -2577,6 +2576,11 @@ string UserDefinedValueType::toString(bool /* _short */) const
 	return *definition().annotation().canonicalName;
 }
 
+string UserDefinedValueType::canonicalName() const
+{
+	return *definition().annotation().canonicalName;
+}
+
 vector<tuple<string, Type const*>> UserDefinedValueType::makeStackItems() const
 {
 	return underlyingType().stackItems();
@@ -2949,6 +2953,7 @@ string FunctionType::richIdentifier() const
 	case Kind::ABIEncode: id += "abiencode"; break;
 	case Kind::ABIEncodePacked: id += "abiencodepacked"; break;
 	case Kind::ABIEncodeWithSelector: id += "abiencodewithselector"; break;
+	case Kind::ABIEncodeCall: id += "abiencodecall"; break;
 	case Kind::ABIEncodeWithSignature: id += "abiencodewithsignature"; break;
 	case Kind::ABIDecode: id += "abidecode"; break;
 	case Kind::MetaType: id += "metatype"; break;
@@ -3513,6 +3518,7 @@ bool FunctionType::isPure() const
 		m_kind == Kind::ABIEncode ||
 		m_kind == Kind::ABIEncodePacked ||
 		m_kind == Kind::ABIEncodeWithSelector ||
+		m_kind == Kind::ABIEncodeCall ||
 		m_kind == Kind::ABIEncodeWithSignature ||
 		m_kind == Kind::ABIDecode ||
 		m_kind == Kind::MetaType ||
@@ -4012,6 +4018,15 @@ MemberList::MemberMap MagicType::nativeMembers(ASTNode const*) const
 				strings{1, ""},
 				strings{1, ""},
 				FunctionType::Kind::ABIEncodeWithSelector,
+				true,
+				StateMutability::Pure
+			)},
+			{"encodeCall", TypeProvider::function(
+				TypePointers{},
+				TypePointers{TypeProvider::array(DataLocation::Memory)},
+				strings{},
+				strings{1, ""},
+				FunctionType::Kind::ABIEncodeCall,
 				true,
 				StateMutability::Pure
 			)},

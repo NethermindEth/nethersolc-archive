@@ -12,5 +12,6 @@ contract C {
 }
 // ====
 // SMTEngine: all
+// SMTIgnoreOS: macos
 // ----
 // Warning 6328: (204-230): CHC: Assertion violation happens here.

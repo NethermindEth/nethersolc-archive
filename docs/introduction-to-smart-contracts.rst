@@ -313,7 +313,7 @@ likely it will be.
     since it is not up to the submitter of a transaction, but up to the miners to determine in which block the transaction is included.
 
     If you want to schedule future calls of your contract, you can use
-    the `alarm clock <https://www.ethereum-alarm-clock.com/>`_ or a similar oracle service.
+    a smart contract automation tool or an oracle service.
 
 .. _the-ethereum-virtual-machine:
 
@@ -565,3 +565,24 @@ contracts, the Ether is forever lost.
 If you want to deactivate your contracts, you should instead **disable** them
 by changing some internal state which causes all functions to revert. This
 makes it impossible to use the contract, as it returns Ether immediately.
+
+
+.. index:: ! precompiled contracts, ! precompiles, ! contract;precompiled
+
+.. _precompiledContracts:
+
+Precompiled Contracts
+=====================
+
+There is a small set of contract addresses that are special:
+The address range between ``1`` and (including) ``8`` contains
+"precompiled contracts" that can be called as any other contract
+but their behaviour (and their gas consumption) is not defined
+by EVM code stored at that address (they do not contain code)
+but instead is implemented in the EVM execution environment itself.
+
+Different EVM-compatible chains might use a different set of
+precompiled contracts. It might also be possible that new
+precompiled contracts are added to the Ethereum main chain in the future,
+but you can reasonably expect them to always be in the range between
+``1`` and ``0xffff`` (inclusive).

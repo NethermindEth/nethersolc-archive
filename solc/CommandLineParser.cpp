@@ -16,10 +16,12 @@
 */
 // SPDX-License-Identifier: GPL-3.0
 
-#include "license.h"
-
 #include <solc/CommandLineParser.h>
+
+#include <solc/Exceptions.h>
+
 #include <libyul/optimiser/Suite.h>
+
 #include <liblangutil/EVMVersion.h>
 
 #include <boost/algorithm/string.hpp>
@@ -36,70 +38,41 @@ namespace po = boost::program_options;
 namespace solidity::frontend
 {
 
-ostream& CommandLineParser::sout()
-{
-	m_hasOutput = true;
-	return m_sout;
-}
-
-ostream& CommandLineParser::serr()
-{
-	m_hasOutput = true;
-	return m_serr;
-}
-
-#define cout
-#define cerr
-
-static string const g_strAbi = "abi";
 static string const g_strAllowPaths = "allow-paths";
 static string const g_strBasePath = "base-path";
 static string const g_strIncludePath = "include-path";
-static string const g_strAsm = "asm";
-static string const g_strAsmJson = "asm-json";
 static string const g_strAssemble = "assemble";
-static string const g_strAst = "ast";
-static string const g_strAstCompactJson = "ast-compact-json";
-static string const g_strBinary = "bin";
-static string const g_strBinaryRuntime = "bin-runtime";
 static string const g_strCombinedJson = "combined-json";
-static string const g_strCompactJSON = "compact-format";
 static string const g_strErrorRecovery = "error-recovery";
 static string const g_strEVM = "evm";
 static string const g_strEVMVersion = "evm-version";
 static string const g_strEwasm = "ewasm";
 static string const g_strExperimentalViaIR = "experimental-via-ir";
-static string const g_strGeneratedSources = "generated-sources";
-static string const g_strGeneratedSourcesRuntime = "generated-sources-runtime";
 static string const g_strGas = "gas";
 static string const g_strHelp = "help";
 static string const g_strImportAst = "import-ast";
 static string const g_strInputFile = "input-file";
-static string const g_strInterface = "interface";
 static string const g_strYul = "yul";
 static string const g_strYulDialect = "yul-dialect";
-static string const g_strIR = "ir";
-static string const g_strIROptimized = "ir-optimized";
+static string const g_strDebugInfo = "debug-info";
 static string const g_strIPFS = "ipfs";
 static string const g_strLicense = "license";
 static string const g_strLibraries = "libraries";
 static string const g_strLink = "link";
+static string const g_strLSP = "lsp";
 static string const g_strMachine = "machine";
-static string const g_strMetadata = "metadata";
 static string const g_strMetadataHash = "metadata-hash";
 static string const g_strMetadataLiteral = "metadata-literal";
 static string const g_strModelCheckerContracts = "model-checker-contracts";
 static string const g_strModelCheckerDivModNoSlacks = "model-checker-div-mod-no-slacks";
 static string const g_strModelCheckerEngine = "model-checker-engine";
+static string const g_strModelCheckerInvariants = "model-checker-invariants";
 static string const g_strModelCheckerShowUnproved = "model-checker-show-unproved";
 static string const g_strModelCheckerSolvers = "model-checker-solvers";
 static string const g_strModelCheckerTargets = "model-checker-targets";
 static string const g_strModelCheckerTimeout = "model-checker-timeout";
-static string const g_strNatspecDev = "devdoc";
-static string const g_strNatspecUser = "userdoc";
 static string const g_strNone = "none";
 static string const g_strNoOptimizeYul = "no-optimize-yul";
-static string const g_strOpcodes = "opcodes";
 static string const g_strOptimize = "optimize";
 static string const g_strOptimizeRuns = "optimize-runs";
 static string const g_strOptimizeYul = "optimize-yul";
@@ -107,7 +80,6 @@ static string const g_strYulOptimizations = "yul-optimizations";
 static string const g_strOutputDir = "output-dir";
 static string const g_strOverwrite = "overwrite";
 static string const g_strRevertStrings = "revert-strings";
-static string const g_strStorageLayout = "storage-layout";
 static string const g_strStopAfter = "stop-after";
 static string const g_strParsing = "parsing";
 
@@ -120,13 +92,8 @@ static set<string> const g_revertStringsArgs
 	revertStringsToString(RevertStrings::VerboseDebug)
 };
 
-static string const g_strSignatureHashes = "hashes";
 static string const g_strSources = "sources";
 static string const g_strSourceList = "sourceList";
-static string const g_strSrcMap = "srcmap";
-static string const g_strSrcMapRuntime = "srcmap-runtime";
-static string const g_strFunDebug = "function-debug";
-static string const g_strFunDebugRuntime = "function-debug-runtime";
 static string const g_strStandardJSON = "standard-json";
 static string const g_strStrictAssembly = "strict-assembly";
 static string const g_strSwarm = "swarm";
@@ -137,30 +104,6 @@ static string const g_strIgnoreMissingFiles = "ignore-missing";
 static string const g_strColor = "color";
 static string const g_strNoColor = "no-color";
 static string const g_strErrorIds = "error-codes";
-
-/// Possible arguments to for --combined-json
-static set<string> const g_combinedJsonArgs
-{
-	g_strAbi,
-	g_strAsm,
-	g_strAst,
-	g_strBinary,
-	g_strBinaryRuntime,
-	g_strCompactJSON,
-	g_strFunDebug,
-	g_strFunDebugRuntime,
-	g_strGeneratedSources,
-	g_strGeneratedSourcesRuntime,
-	g_strInterface,
-	g_strMetadata,
-	g_strNatspecUser,
-	g_strNatspecDev,
-	g_strOpcodes,
-	g_strSignatureHashes,
-	g_strSrcMap,
-	g_strSrcMapRuntime,
-	g_strStorageLayout
-};
 
 /// Possible arguments to for --machine
 static set<string> const g_machineArgs
@@ -184,87 +127,88 @@ static set<string> const g_metadataHashArgs
 	g_strNone
 };
 
-void CommandLineParser::printVersionAndExit()
-{
-	sout() <<
-		"solc, the solidity compiler commandline interface" <<
-		endl <<
-		"Version: " <<
-		solidity::frontend::VersionString <<
-		endl;
-	exit(EXIT_SUCCESS);
-}
+static map<InputMode, string> const g_inputModeName = {
+	{InputMode::Help, "help"},
+	{InputMode::License, "license"},
+	{InputMode::Version, "version"},
+	{InputMode::Compiler, "compiler"},
+	{InputMode::CompilerWithASTImport, "compiler (AST import)"},
+	{InputMode::Assembler, "assembler"},
+	{InputMode::StandardJson, "standard JSON"},
+	{InputMode::Linker, "linker"},
+	{InputMode::LanguageServer, "language server (LSP)"},
+};
 
-void CommandLineParser::printLicenseAndExit()
-{
-	sout() << otherLicenses << endl;
-	// This is a static variable generated by cmake from LICENSE.txt
-	sout() << licenseText << endl;
-	exit(EXIT_SUCCESS);
-}
-
-
-bool CommandLineParser::checkMutuallyExclusive(vector<string> const& _optionNames)
+void CommandLineParser::checkMutuallyExclusive(vector<string> const& _optionNames)
 {
 	if (countEnabledOptions(_optionNames) > 1)
 	{
-		serr() << "The following options are mutually exclusive: " << joinOptionNames(_optionNames) << ". ";
-		serr() << "Select at most one." << endl;
-		return false;
+		solThrow(
+			CommandLineValidationError,
+			"The following options are mutually exclusive: " + joinOptionNames(_optionNames) + ". " +
+			"Select at most one."
+		);
 	}
-	return true;
 }
 
 bool CompilerOutputs::operator==(CompilerOutputs const& _other) const noexcept
 {
-	static_assert(
-		sizeof(*this) == 15 * sizeof(bool),
-		"Remember to update code below if you add/remove fields."
-	);
+	for (bool CompilerOutputs::* member: componentMap() | ranges::views::values)
+		if (this->*member != _other.*member)
+			return false;
+	return true;
+}
 
-	return
-		astCompactJson == _other.astCompactJson &&
-		asm_ == _other.asm_ &&
-		asmJson == _other.asmJson &&
-		opcodes == _other.opcodes &&
-		binary == _other.binary &&
-		binaryRuntime == _other.binaryRuntime &&
-		abi == _other.abi &&
-		ir == _other.ir &&
-		irOptimized == _other.irOptimized &&
-		ewasm == _other.ewasm &&
-		signatureHashes == _other.signatureHashes &&
-		natspecUser == _other.natspecUser &&
-		natspecDev == _other.natspecDev &&
-		metadata == _other.metadata &&
-		storageLayout == _other.storageLayout;
+ostream& operator<<(ostream& _out, CompilerOutputs const& _selection)
+{
+	vector<string> serializedSelection;
+	for (auto&& [componentName, component]: CompilerOutputs::componentMap())
+		if (_selection.*component)
+			serializedSelection.push_back(CompilerOutputs::componentName(component));
+
+	return _out << joinHumanReadable(serializedSelection, ",");
+}
+
+string const& CompilerOutputs::componentName(bool CompilerOutputs::* _component)
+{
+	solAssert(_component, "");
+
+	// NOTE: Linear search is not optimal but it's simpler than getting pointers-to-members to work as map keys.
+	for (auto const& [componentName, component]: CompilerOutputs::componentMap())
+		if (component == _component)
+			return componentName;
+
+	solAssert(false, "");
 }
 
 bool CombinedJsonRequests::operator==(CombinedJsonRequests const& _other) const noexcept
 {
-	static_assert(
-		sizeof(*this) == 17 * sizeof(bool),
-		"Remember to update code below if you add/remove fields."
-	);
+	for (bool CombinedJsonRequests::* member: componentMap() | ranges::views::values)
+		if (this->*member != _other.*member)
+			return false;
+	return true;
+}
 
-	return
-		abi == _other.abi &&
-		metadata == _other.metadata &&
-		binary == _other.binary &&
-		binaryRuntime == _other.binaryRuntime &&
-		opcodes == _other.opcodes &&
-		asm_ == _other.asm_ &&
-		storageLayout == _other.storageLayout &&
-		generatedSources == _other.generatedSources &&
-		generatedSourcesRuntime == _other.generatedSourcesRuntime &&
-		srcMap == _other.srcMap &&
-		srcMapRuntime == _other.srcMapRuntime &&
-		funDebug == _other.funDebug &&
-		funDebugRuntime == _other.funDebugRuntime &&
-		signatureHashes == _other.signatureHashes &&
-		natspecDev == _other.natspecDev &&
-		natspecUser == _other.natspecUser &&
-		ast == _other.ast;
+
+ostream& operator<<(ostream& _out, CombinedJsonRequests const& _requests)
+{
+	vector<string> serializedRequests;
+	for (auto&& [componentName, component]: CombinedJsonRequests::componentMap())
+		if (_requests.*component)
+			serializedRequests.push_back(CombinedJsonRequests::componentName(component));
+
+	return _out << joinHumanReadable(serializedRequests, ",");
+}
+
+string const& CombinedJsonRequests::componentName(bool CombinedJsonRequests::* _component)
+{
+	solAssert(_component, "");
+
+	for (auto const& [componentName, component]: CombinedJsonRequests::componentMap())
+		if (component == _component)
+			return componentName;
+
+	solAssert(false, "");
 }
 
 bool CommandLineOptions::operator==(CommandLineOptions const& _other) const noexcept
@@ -283,6 +227,7 @@ bool CommandLineOptions::operator==(CommandLineOptions const& _other) const noex
 		output.evmVersion == _other.output.evmVersion &&
 		output.experimentalViaIR == _other.output.experimentalViaIR &&
 		output.revertStrings == _other.output.revertStrings &&
+		output.debugInfoSelection == _other.output.debugInfoSelection &&
 		output.stopAfter == _other.output.stopAfter &&
 		input.mode == _other.input.mode &&
 		assembly.targetMachine == _other.assembly.targetMachine &&
@@ -325,17 +270,13 @@ OptimiserSettings CommandLineOptions::optimiserSettings() const
 	return settings;
 }
 
-bool CommandLineParser::parse(int _argc, char const* const* _argv, bool _interactiveTerminal)
+void CommandLineParser::parse(int _argc, char const* const* _argv)
 {
-	m_hasOutput = false;
-
-	if (!parseArgs(_argc, _argv, _interactiveTerminal))
-		return false;
-
-	return processArgs();
+	parseArgs(_argc, _argv);
+	processArgs();
 }
 
-bool CommandLineParser::parseInputPathsAndRemappings()
+void CommandLineParser::parseInputPathsAndRemappings()
 {
 	m_options.input.ignoreMissingFiles = (m_args.count(g_strIgnoreMissingFiles) > 0);
 
@@ -346,17 +287,14 @@ bool CommandLineParser::parseInputPathsAndRemappings()
 			{
 				optional<ImportRemapper::Remapping> remapping = ImportRemapper::parseRemapping(positionalArg);
 				if (!remapping.has_value())
-				{
-					serr() << "Invalid remapping: \"" << positionalArg << "\"." << endl;
-					return false;
-				}
+					solThrow(CommandLineValidationError, "Invalid remapping: \"" + positionalArg + "\".");
 
 				if (m_options.input.mode == InputMode::StandardJson)
-				{
-					serr() << "Import remappings are not accepted on the command line in Standard JSON mode." << endl;
-					serr() << "Please put them under 'settings.remappings' in the JSON input." << endl;
-					return false;
-				}
+					solThrow(
+						CommandLineValidationError,
+						"Import remappings are not accepted on the command line in Standard JSON mode.\n"
+						"Please put them under 'settings.remappings' in the JSON input."
+					);
 
 				if (!remapping->target.empty())
 				{
@@ -381,26 +319,24 @@ bool CommandLineParser::parseInputPathsAndRemappings()
 	if (m_options.input.mode == InputMode::StandardJson)
 	{
 		if (m_options.input.paths.size() > 1 || (m_options.input.paths.size() == 1 && m_options.input.addStdin))
-		{
-			serr() << "Too many input files for --" << g_strStandardJSON << "." << endl;
-			serr() << "Please either specify a single file name or provide its content on standard input." << endl;
-			return false;
-		}
+			solThrow(
+				CommandLineValidationError,
+				"Too many input files for --" + g_strStandardJSON + ".\n"
+				"Please either specify a single file name or provide its content on standard input."
+			);
 		else if (m_options.input.paths.size() == 0)
 			// Standard JSON mode input used to be handled separately and zero files meant "read from stdin".
 			// Keep it working that way for backwards-compatibility.
 			m_options.input.addStdin = true;
 	}
 	else if (m_options.input.paths.size() == 0 && !m_options.input.addStdin)
-	{
-		serr() << "No input files given. If you wish to use the standard input please specify \"-\" explicitly." << endl;
-		return false;
-	}
-
-	return true;
+		solThrow(
+			CommandLineValidationError,
+			"No input files given. If you wish to use the standard input please specify \"-\" explicitly."
+		);
 }
 
-bool CommandLineParser::parseLibraryOption(string const& _input)
+void CommandLineParser::parseLibraryOption(string const& _input)
 {
 	namespace fs = boost::filesystem;
 	string data = _input;
@@ -435,68 +371,132 @@ bool CommandLineParser::parseLibraryOption(string const& _input)
 			{
 				separator = lib.rfind(':');
 				if (separator == string::npos)
-				{
-					serr() << "Equal sign separator missing in library address specifier \"" << lib << "\"" << endl;
-					return false;
-				}
+					solThrow(
+						CommandLineValidationError,
+						"Equal sign separator missing in library address specifier \"" + lib + "\""
+					);
 				else
 					isSeparatorEqualSign = false; // separator is colon
 			}
 			else
 				if (lib.rfind('=') != lib.find('='))
-				{
-					serr() << "Only one equal sign \"=\" is allowed in the address string \"" << lib << "\"." << endl;
-					return false;
-				}
+					solThrow(
+						CommandLineValidationError,
+						"Only one equal sign \"=\" is allowed in the address string \"" + lib + "\"."
+					);
 
 			string libName(lib.begin(), lib.begin() + static_cast<ptrdiff_t>(separator));
 			boost::trim(libName);
 			if (m_options.linker.libraries.count(libName))
-			{
-				serr() << "Address specified more than once for library \"" << libName << "\"." << endl;
-				return false;
-			}
+				solThrow(
+					CommandLineValidationError,
+					"Address specified more than once for library \"" + libName + "\"."
+				);
 
 			string addrString(lib.begin() + static_cast<ptrdiff_t>(separator) + 1, lib.end());
 			boost::trim(addrString);
 			if (addrString.empty())
-			{
-				serr() << "Empty address provided for library \"" << libName << "\"." << endl;
-				serr() << "Note that there should not be any whitespace after the " << (isSeparatorEqualSign ? "equal sign" : "colon") << "." << endl;
-				return false;
-			}
+				solThrow(
+					CommandLineValidationError,
+					"Empty address provided for library \"" + libName + "\".\n"
+					"Note that there should not be any whitespace after the " +
+					(isSeparatorEqualSign ? "equal sign" : "colon") + "."
+				);
 
 			if (addrString.substr(0, 2) == "0x")
 				addrString = addrString.substr(2);
 			else
-			{
-				serr() << "The address " << addrString << " is not prefixed with \"0x\"." << endl;
-				serr() << "Note that the address must be prefixed with \"0x\"." << endl;
-				return false;
-			}
+				solThrow(
+					CommandLineValidationError,
+					"The address " + addrString + " is not prefixed with \"0x\".\n"
+					"Note that the address must be prefixed with \"0x\"."
+				);
 
 			if (addrString.length() != 40)
-			{
-				serr() << "Invalid length for address for library \"" << libName << "\": " << addrString.length() << " instead of 40 characters." << endl;
-				return false;
-			}
+				solThrow(
+					CommandLineValidationError,
+					"Invalid length for address for library \"" + libName + "\": " +
+					to_string(addrString.length()) + " instead of 40 characters."
+				);
 			if (!passesAddressChecksum(addrString, false))
-			{
-				serr() << "Invalid checksum on address for library \"" << libName << "\": " << addrString << endl;
-				serr() << "The correct checksum is " << getChecksummedAddress(addrString) << endl;
-				return false;
-			}
+				solThrow(
+					CommandLineValidationError,
+					"Invalid checksum on address for library \"" + libName + "\": " + addrString + "\n"
+					"The correct checksum is " + getChecksummedAddress(addrString)
+				);
 			bytes binAddr = fromHex(addrString);
 			h160 address(binAddr, h160::AlignRight);
 			if (binAddr.size() > 20 || address == h160())
-			{
-				serr() << "Invalid address for library \"" << libName << "\": " << addrString << endl;
-				return false;
-			}
+				solThrow(
+					CommandLineValidationError,
+					"Invalid address for library \"" + libName + "\": " + addrString
+				);
 			m_options.linker.libraries[libName] = address;
 		}
+}
 
-	return true;
+void CommandLineParser::parseOutputSelection()
+{
+	static auto outputSupported = [](InputMode _mode, string_view _outputName)
+	{
+		static set<string> const compilerModeOutputs = (
+			CompilerOutputs::componentMap() |
+			ranges::views::keys |
+			ranges::to<set>()
+		) - set<string>{CompilerOutputs::componentName(&CompilerOutputs::ewasmIR)};
+		static set<string> const assemblerModeOutputs = {
+			CompilerOutputs::componentName(&CompilerOutputs::asm_),
+			CompilerOutputs::componentName(&CompilerOutputs::binary),
+			CompilerOutputs::componentName(&CompilerOutputs::irOptimized),
+			CompilerOutputs::componentName(&CompilerOutputs::ewasm),
+			CompilerOutputs::componentName(&CompilerOutputs::ewasmIR),
+		};
+
+		switch (_mode)
+		{
+		case InputMode::Help:
+		case InputMode::License:
+		case InputMode::Version:
+		case InputMode::LanguageServer:
+			solAssert(false);
+		case InputMode::Compiler:
+		case InputMode::CompilerWithASTImport:
+			return contains(compilerModeOutputs, _outputName);
+		case InputMode::Assembler:
+			return contains(assemblerModeOutputs, _outputName);
+		case InputMode::StandardJson:
+		case InputMode::Linker:
+			return false;
+		}
+
+		solAssert(false, "");
+	};
+
+	for (auto&& [optionName, outputComponent]: CompilerOutputs::componentMap())
+		m_options.compiler.outputs.*outputComponent = (m_args.count(optionName) > 0);
+
+	if (m_options.input.mode == InputMode::Assembler && m_options.compiler.outputs == CompilerOutputs{})
+	{
+		// In assembly mode keep the default outputs enabled for backwards-compatibility.
+		// TODO: Remove this (must be done in a breaking release).
+		m_options.compiler.outputs.asm_ = true;
+		m_options.compiler.outputs.binary = true;
+		m_options.compiler.outputs.irOptimized = true;
+		m_options.compiler.outputs.ewasm = true;
+		m_options.compiler.outputs.ewasmIR = true;
+	}
+
+	vector<string> unsupportedOutputs;
+	for (auto&& [optionName, outputComponent]: CompilerOutputs::componentMap())
+		if (m_options.compiler.outputs.*outputComponent && !outputSupported(m_options.input.mode, optionName))
+			unsupportedOutputs.push_back(optionName);
+
+	if (!unsupportedOutputs.empty())
+		solThrow(
+			CommandLineValidationError,
+			"The following outputs are not supported in " + g_inputModeName.at(m_options.input.mode) + " mode: " +
+			joinOptionNames(unsupportedOutputs) + "."
+		);
 }
 
 po::options_description CommandLineParser::optionsDescription()
@@ -515,7 +515,7 @@ at standard output or in files in the output directory, if specified.
 Imports are automatically read from the filesystem, but it is also possible to
 remap paths using the context:prefix=path syntax.
 Example:
-solc --)" + g_strBinary + R"( -o /tmp/solcoutput dapp-bin=/usr/local/lib/dapp-bin contract.sol
+solc --)" + CompilerOutputs::componentName(&CompilerOutputs::binary) + R"( -o /tmp/solcoutput dapp-bin=/usr/local/lib/dapp-bin contract.sol
 
 General Information)").c_str(),
 		po::options_description::m_default_line_length,
@@ -582,8 +582,15 @@ General Information)").c_str(),
 		)
 		(
 			g_strRevertStrings.c_str(),
-			po::value<string>()->value_name(boost::join(g_revertStringsArgs, ",")),
+			po::value<string>()->value_name(joinHumanReadable(g_revertStringsArgs, ",")),
 			"Strip revert (and require) reason strings or add additional debugging information."
+		)
+		(
+			g_strDebugInfo.c_str(),
+			po::value<string>()->default_value(toString(DebugInfoSelection::Default())),
+			("Debug info components to be included in the produced EVM assembly and Yul code. "
+			"Value can be all, none or a comma-separated list containing one or more of the "
+			"following components: " + joinHumanReadable(DebugInfoSelection::componentMap() | ranges::views::keys) + ".").c_str()
 		)
 		(
 			g_strStopAfter.c_str(),
@@ -627,7 +634,12 @@ General Information)").c_str(),
 			g_strImportAst.c_str(),
 			("Import ASTs to be compiled, assumes input holds the AST in compact JSON format. "
 			"Supported Inputs is the output of the --" + g_strStandardJSON + " or the one produced by "
-			"--" + g_strCombinedJson + " " + g_strAst + "," + g_strCompactJSON).c_str()
+			"--" + g_strCombinedJson + " " + CombinedJsonRequests::componentName(&CombinedJsonRequests::ast)).c_str()
+		)
+		(
+			g_strLSP.c_str(),
+			"Switch to language server mode (\"LSP\"). Allows the compiler to be used as an analysis backend "
+			"for your favourite IDE."
 		)
 	;
 	desc.add(alternativeInputModes);
@@ -636,12 +648,12 @@ General Information)").c_str(),
 	assemblyModeOptions.add_options()
 		(
 			g_strMachine.c_str(),
-			po::value<string>()->value_name(boost::join(g_machineArgs, ",")),
+			po::value<string>()->value_name(joinHumanReadable(g_machineArgs, ",")),
 			"Target machine in assembly or Yul mode."
 		)
 		(
 			g_strYulDialect.c_str(),
-			po::value<string>()->value_name(boost::join(g_yulDialectArgs, ",")),
+			po::value<string>()->value_name(joinHumanReadable(g_yulDialectArgs, ",")),
 			"Input dialect to use in assembly or yul mode."
 		)
 	;
@@ -687,21 +699,22 @@ General Information)").c_str(),
 
 	po::options_description outputComponents("Output Components");
 	outputComponents.add_options()
-		(g_strAstCompactJson.c_str(), "AST of all source files in a compact JSON format.")
-		(g_strAsm.c_str(), "EVM assembly of the contracts.")
-		(g_strAsmJson.c_str(), "EVM assembly of the contracts in JSON format.")
-		(g_strOpcodes.c_str(), "Opcodes of the contracts.")
-		(g_strBinary.c_str(), "Binary of the contracts in hex.")
-		(g_strBinaryRuntime.c_str(), "Binary of the runtime part of the contracts in hex.")
-		(g_strAbi.c_str(), "ABI specification of the contracts.")
-		(g_strIR.c_str(), "Intermediate Representation (IR) of all contracts (EXPERIMENTAL).")
-		(g_strIROptimized.c_str(), "Optimized intermediate Representation (IR) of all contracts (EXPERIMENTAL).")
-		(g_strEwasm.c_str(), "Ewasm text representation of all contracts (EXPERIMENTAL).")
-		(g_strSignatureHashes.c_str(), "Function signature hashes of the contracts.")
-		(g_strNatspecUser.c_str(), "Natspec user documentation of all contracts.")
-		(g_strNatspecDev.c_str(), "Natspec developer documentation of all contracts.")
-		(g_strMetadata.c_str(), "Combined Metadata JSON whose Swarm hash is stored on-chain.")
-		(g_strStorageLayout.c_str(), "Slots, offsets and types of the contract's state variables.")
+		(CompilerOutputs::componentName(&CompilerOutputs::astCompactJson).c_str(), "AST of all source files in a compact JSON format.")
+		(CompilerOutputs::componentName(&CompilerOutputs::asm_).c_str(), "EVM assembly of the contracts.")
+		(CompilerOutputs::componentName(&CompilerOutputs::asmJson).c_str(), "EVM assembly of the contracts in JSON format.")
+		(CompilerOutputs::componentName(&CompilerOutputs::opcodes).c_str(), "Opcodes of the contracts.")
+		(CompilerOutputs::componentName(&CompilerOutputs::binary).c_str(), "Binary of the contracts in hex.")
+		(CompilerOutputs::componentName(&CompilerOutputs::binaryRuntime).c_str(), "Binary of the runtime part of the contracts in hex.")
+		(CompilerOutputs::componentName(&CompilerOutputs::abi).c_str(), "ABI specification of the contracts.")
+		(CompilerOutputs::componentName(&CompilerOutputs::ir).c_str(), "Intermediate Representation (IR) of all contracts (EXPERIMENTAL).")
+		(CompilerOutputs::componentName(&CompilerOutputs::irOptimized).c_str(), "Optimized intermediate Representation (IR) of all contracts (EXPERIMENTAL).")
+		(CompilerOutputs::componentName(&CompilerOutputs::ewasm).c_str(), "Ewasm text representation of all contracts (EXPERIMENTAL).")
+		(CompilerOutputs::componentName(&CompilerOutputs::ewasmIR).c_str(), "Intermediate representation (IR) converted to a form that can be translated directly into Ewasm text representation (EXPERIMENTAL).")
+		(CompilerOutputs::componentName(&CompilerOutputs::signatureHashes).c_str(), "Function signature hashes of the contracts.")
+		(CompilerOutputs::componentName(&CompilerOutputs::natspecUser).c_str(), "Natspec user documentation of all contracts.")
+		(CompilerOutputs::componentName(&CompilerOutputs::natspecDev).c_str(), "Natspec developer documentation of all contracts.")
+		(CompilerOutputs::componentName(&CompilerOutputs::metadata).c_str(), "Combined Metadata JSON whose Swarm hash is stored on-chain.")
+		(CompilerOutputs::componentName(&CompilerOutputs::storageLayout).c_str(), "Slots, offsets and types of the contract's state variables.")
 	;
 	desc.add(outputComponents);
 
@@ -713,7 +726,7 @@ General Information)").c_str(),
 		)
 		(
 			g_strCombinedJson.c_str(),
-			po::value<string>()->value_name(boost::join(g_combinedJsonArgs, ",")),
+			po::value<string>()->value_name(joinHumanReadable(CombinedJsonRequests::componentMap() | ranges::views::keys, ",")),
 			"Output a single json document containing the specified information."
 		)
 	;
@@ -723,7 +736,7 @@ General Information)").c_str(),
 	metadataOptions.add_options()
 		(
 			g_strMetadataHash.c_str(),
-			po::value<string>()->value_name(boost::join(g_metadataHashArgs, ",")),
+			po::value<string>()->value_name(joinHumanReadable(g_metadataHashArgs, ",")),
 			"Choose hash method for the bytecode metadata or disable it."
 		)
 		(
@@ -783,6 +796,13 @@ General Information)").c_str(),
 			"Select model checker engine."
 		)
 		(
+			g_strModelCheckerInvariants.c_str(),
+			po::value<string>()->value_name("default,all,contract,reentrancy")->default_value("default"),
+			"Select whether to report inferred contract inductive invariants."
+			" Multiple types of invariants can be selected at the same time, separated by a comma and no spaces."
+			" By default no invariants are reported."
+		)
+		(
 			g_strModelCheckerShowUnproved.c_str(),
 			"Show all unproved targets separately."
 		)
@@ -820,7 +840,7 @@ po::positional_options_description CommandLineParser::positionalOptionsDescripti
 	return filesPositions;
 }
 
-bool CommandLineParser::parseArgs(int _argc, char const* const* _argv, bool _interactiveTerminal)
+void CommandLineParser::parseArgs(int _argc, char const* const* _argv)
 {
 	po::options_description allOptions = optionsDescription();
 	po::positional_options_description filesPositions = positionalOptionsDescription();
@@ -835,41 +855,37 @@ bool CommandLineParser::parseArgs(int _argc, char const* const* _argv, bool _int
 	}
 	catch (po::error const& _exception)
 	{
-		serr() << _exception.what() << endl;
-		return false;
+		solThrow(CommandLineValidationError, _exception.what());
 	}
-
-	if (m_args.count(g_strHelp) || (_interactiveTerminal && _argc == 1))
-	{
-		sout() << allOptions;
-		return false;
-	}
-
-	if (m_args.count(g_strVersion))
-		printVersionAndExit();
-
-	if (m_args.count(g_strLicense))
-		printLicenseAndExit();
 
 	po::notify(m_args);
-
-	return true;
 }
 
-bool CommandLineParser::processArgs()
+void CommandLineParser::processArgs()
 {
-	if (!checkMutuallyExclusive({
+	checkMutuallyExclusive({
+		g_strHelp,
+		g_strLicense,
+		g_strVersion,
 		g_strStandardJSON,
 		g_strLink,
 		g_strAssemble,
 		g_strStrictAssembly,
 		g_strYul,
 		g_strImportAst,
-	}))
-		return false;
+		g_strLSP
+	});
 
-	if (m_args.count(g_strStandardJSON) > 0)
+	if (m_args.count(g_strHelp) > 0)
+		m_options.input.mode = InputMode::Help;
+	else if (m_args.count(g_strLicense) > 0)
+		m_options.input.mode = InputMode::License;
+	else if (m_args.count(g_strVersion) > 0)
+		m_options.input.mode = InputMode::Version;
+	else if (m_args.count(g_strStandardJSON) > 0)
 		m_options.input.mode = InputMode::StandardJson;
+	else if (m_args.count(g_strLSP))
+		m_options.input.mode = InputMode::LanguageServer;
 	else if (m_args.count(g_strAssemble) > 0 || m_args.count(g_strStrictAssembly) > 0 || m_args.count(g_strYul) > 0)
 		m_options.input.mode = InputMode::Assembler;
 	else if (m_args.count(g_strLink) > 0)
@@ -880,32 +896,50 @@ bool CommandLineParser::processArgs()
 		m_options.input.mode = InputMode::Compiler;
 
 	if (
-		m_args.count(g_strExperimentalViaIR) > 0 &&
-		m_options.input.mode != InputMode::Compiler &&
-		m_options.input.mode != InputMode::CompilerWithASTImport
+		m_options.input.mode == InputMode::Help ||
+		m_options.input.mode == InputMode::License ||
+		m_options.input.mode == InputMode::Version
 	)
+		return;
+
+	map<string, set<InputMode>> validOptionInputModeCombinations = {
+		// TODO: This should eventually contain all options.
+		{g_strErrorRecovery, {InputMode::Compiler, InputMode::CompilerWithASTImport}},
+		{g_strExperimentalViaIR, {InputMode::Compiler, InputMode::CompilerWithASTImport}},
+	};
+	vector<string> invalidOptionsForCurrentInputMode;
+	for (auto const& [optionName, inputModes]: validOptionInputModeCombinations)
 	{
-		serr() << "The option --" << g_strExperimentalViaIR << " is only supported in the compiler mode." << endl;
-		return false;
+		if (m_args.count(optionName) > 0 && inputModes.count(m_options.input.mode) == 0)
+			invalidOptionsForCurrentInputMode.push_back(optionName);
 	}
 
-	if (!checkMutuallyExclusive({g_strColor, g_strNoColor}))
-		return false;
+	if (!invalidOptionsForCurrentInputMode.empty())
+		solThrow(
+			CommandLineValidationError,
+			"The following options are not supported in the current input mode: " +
+			joinOptionNames(invalidOptionsForCurrentInputMode)
+		);
 
-	array<string, 8> const conflictingWithStopAfter{
-		g_strBinary,
-		g_strIR,
-		g_strIROptimized,
-		g_strEwasm,
+	if (m_options.input.mode == InputMode::LanguageServer)
+		return;
+
+	checkMutuallyExclusive({g_strColor, g_strNoColor});
+
+	array<string, 9> const conflictingWithStopAfter{
+		CompilerOutputs::componentName(&CompilerOutputs::binary),
+		CompilerOutputs::componentName(&CompilerOutputs::ir),
+		CompilerOutputs::componentName(&CompilerOutputs::irOptimized),
+		CompilerOutputs::componentName(&CompilerOutputs::ewasm),
+		CompilerOutputs::componentName(&CompilerOutputs::ewasmIR),
 		g_strGas,
-		g_strAsm,
-		g_strAsmJson,
-		g_strOpcodes
+		CompilerOutputs::componentName(&CompilerOutputs::asm_),
+		CompilerOutputs::componentName(&CompilerOutputs::asmJson),
+		CompilerOutputs::componentName(&CompilerOutputs::opcodes),
 	};
 
 	for (auto& option: conflictingWithStopAfter)
-		if (!checkMutuallyExclusive({g_strStopAfter, option}))
-			return false;
+		checkMutuallyExclusive({g_strStopAfter, option});
 
 	if (
 		m_options.input.mode != InputMode::Compiler &&
@@ -914,17 +948,23 @@ bool CommandLineParser::processArgs()
 	)
 	{
 		if (!m_args[g_strOptimizeRuns].defaulted())
-		{
-			serr() << "Option --" << g_strOptimizeRuns << " is only valid in compiler and assembler modes." << endl;
-			return false;
-		}
+			solThrow(
+				CommandLineValidationError,
+				"Option --" + g_strOptimizeRuns + " is only valid in compiler and assembler modes."
+			);
 
 		for (string const& option: {g_strOptimize, g_strNoOptimizeYul, g_strOptimizeYul, g_strYulOptimizations})
 			if (m_args.count(option) > 0)
-			{
-				serr() << "Option --" << option << " is only valid in compiler and assembler modes." << endl;
-				return false;
-			}
+				solThrow(
+					CommandLineValidationError,
+					"Option --" + option + " is only valid in compiler and assembler modes."
+				);
+
+		if (!m_args[g_strDebugInfo].defaulted())
+			solThrow(
+				CommandLineValidationError,
+				"Option --" + g_strDebugInfo + " is only valid in compiler and assembler modes."
+			);
 	}
 
 	if (m_args.count(g_strColor) > 0)
@@ -939,20 +979,30 @@ bool CommandLineParser::processArgs()
 		string revertStringsString = m_args[g_strRevertStrings].as<string>();
 		std::optional<RevertStrings> revertStrings = revertStringsFromString(revertStringsString);
 		if (!revertStrings)
-		{
-			serr() << "Invalid option for --" << g_strRevertStrings << ": " << revertStringsString << endl;
-			return false;
-		}
+			solThrow(
+				CommandLineValidationError,
+				"Invalid option for --" + g_strRevertStrings + ": " + revertStringsString
+			);
 		if (*revertStrings == RevertStrings::VerboseDebug)
-		{
-			serr() << "Only \"default\", \"strip\" and \"debug\" are implemented for --" << g_strRevertStrings << " for now." << endl;
-			return false;
-		}
+			solThrow(
+				CommandLineValidationError,
+				"Only \"default\", \"strip\" and \"debug\" are implemented for --" + g_strRevertStrings + " for now."
+			);
 		m_options.output.revertStrings = *revertStrings;
 	}
 
-	if (!parseCombinedJsonOption())
-		return false;
+	if (!m_args[g_strDebugInfo].defaulted())
+	{
+		string optionValue = m_args[g_strDebugInfo].as<string>();
+		m_options.output.debugInfoSelection = DebugInfoSelection::fromString(optionValue);
+		if (!m_options.output.debugInfoSelection.has_value())
+			solThrow(CommandLineValidationError, "Invalid value for --" + g_strDebugInfo + " option: " + optionValue);
+
+		if (m_options.output.debugInfoSelection->snippet && !m_options.output.debugInfoSelection->location)
+			solThrow(CommandLineValidationError, "To use 'snippet' with --" + g_strDebugInfo + " you must select also 'location'.");
+	}
+
+	parseCombinedJsonOption();
 
 	if (m_args.count(g_strOutputDir))
 		m_options.output.dir = m_args.at(g_strOutputDir).as<string>();
@@ -969,25 +1019,7 @@ bool CommandLineParser::processArgs()
 		m_options.formatting.json.indent = m_args[g_strJsonIndent].as<uint32_t>();
 	}
 
-	static_assert(
-		sizeof(m_options.compiler.outputs) == 15 * sizeof(bool),
-		"Remember to update code below if you add/remove fields."
-	);
-	m_options.compiler.outputs.astCompactJson = (m_args.count(g_strAstCompactJson) > 0);
-	m_options.compiler.outputs.asm_ = (m_args.count(g_strAsm) > 0);
-	m_options.compiler.outputs.asmJson = (m_args.count(g_strAsmJson) > 0);
-	m_options.compiler.outputs.opcodes = (m_args.count(g_strOpcodes) > 0);
-	m_options.compiler.outputs.binary = (m_args.count(g_strBinary) > 0);
-	m_options.compiler.outputs.binaryRuntime = (m_args.count(g_strBinaryRuntime) > 0);
-	m_options.compiler.outputs.abi = (m_args.count(g_strAbi) > 0);
-	m_options.compiler.outputs.ir = (m_args.count(g_strIR) > 0);
-	m_options.compiler.outputs.irOptimized = (m_args.count(g_strIROptimized) > 0);
-	m_options.compiler.outputs.ewasm = (m_args.count(g_strEwasm) > 0);
-	m_options.compiler.outputs.signatureHashes = (m_args.count(g_strSignatureHashes) > 0);
-	m_options.compiler.outputs.natspecUser = (m_args.count(g_strNatspecUser) > 0);
-	m_options.compiler.outputs.natspecDev = (m_args.count(g_strNatspecDev) > 0);
-	m_options.compiler.outputs.metadata = (m_args.count(g_strMetadata) > 0);
-	m_options.compiler.outputs.storageLayout = (m_args.count(g_strStorageLayout) > 0);
+	parseOutputSelection();
 
 	m_options.compiler.estimateGas = (m_args.count(g_strGas) > 0);
 
@@ -997,18 +1029,13 @@ bool CommandLineParser::processArgs()
 	if (m_args.count(g_strIncludePath) > 0)
 	{
 		if (m_options.input.basePath.empty())
-		{
-			serr() << "--" << g_strIncludePath << " option requires a non-empty base path." << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "--" + g_strIncludePath + " option requires a non-empty base path.");
 
 		for (string const& includePath: m_args[g_strIncludePath].as<vector<string>>())
 		{
 			if (includePath.empty())
-			{
-				serr() << "Empty values are not allowed in --" << g_strIncludePath << "." << endl;
-				return false;
-			}
+				solThrow(CommandLineValidationError, "Empty values are not allowed in --" + g_strIncludePath + ".");
+
 			m_options.input.includePaths.push_back(includePath);
 		}
 	}
@@ -1024,37 +1051,29 @@ bool CommandLineParser::processArgs()
 	if (m_args.count(g_strStopAfter))
 	{
 		if (m_args[g_strStopAfter].as<string>() != "parsing")
-		{
-			serr() << "Valid options for --" << g_strStopAfter << " are: \"parsing\".\n";
-			return false;
-		}
+			solThrow(CommandLineValidationError, "Valid options for --" + g_strStopAfter + " are: \"parsing\".\n");
 		else
 			m_options.output.stopAfter = CompilerStack::State::Parsed;
 	}
 
-	if (!parseInputPathsAndRemappings())
-		return false;
+	parseInputPathsAndRemappings();
 
 	if (m_options.input.mode == InputMode::StandardJson)
-		return true;
+		return;
 
 	if (m_args.count(g_strLibraries))
 		for (string const& library: m_args[g_strLibraries].as<vector<string>>())
-			if (!parseLibraryOption(library))
-				return false;
+			parseLibraryOption(library);
 
 	if (m_options.input.mode == InputMode::Linker)
-		return true;
+		return;
 
 	if (m_args.count(g_strEVMVersion))
 	{
 		string versionOptionStr = m_args[g_strEVMVersion].as<string>();
 		std::optional<langutil::EVMVersion> versionOption = langutil::EVMVersion::fromString(versionOptionStr);
 		if (!versionOption)
-		{
-			serr() << "Invalid option for --" << g_strEVMVersion << ": " << versionOptionStr << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "Invalid option for --" + g_strEVMVersion + ": " + versionOptionStr);
 		m_options.output.evmVersion = *versionOption;
 	}
 
@@ -1067,10 +1086,7 @@ bool CommandLineParser::processArgs()
 	{
 		OptimiserSettings optimiserSettings = m_options.optimiserSettings();
 		if (!optimiserSettings.runYulOptimiser)
-		{
-			serr() << "--" << g_strYulOptimizations << " is invalid if Yul optimizer is disabled" << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "--" + g_strYulOptimizations + " is invalid if Yul optimizer is disabled");
 
 		try
 		{
@@ -1078,8 +1094,10 @@ bool CommandLineParser::processArgs()
 		}
 		catch (yul::OptimizerException const& _exception)
 		{
-			serr() << "Invalid optimizer step sequence in --" << g_strYulOptimizations << ": " << _exception.what() << endl;
-			return false;
+			solThrow(
+				CommandLineValidationError,
+				"Invalid optimizer step sequence in --" + g_strYulOptimizations + ": " + _exception.what()
+			);
 		}
 
 		m_options.optimizer.yulSteps = m_args[g_strYulOptimizations].as<string>();
@@ -1100,12 +1118,11 @@ bool CommandLineParser::processArgs()
 			auto optionEnabled = [&](string const& name){ return m_args.count(name) > 0; };
 			auto enabledOptions = nonAssemblyModeOptions | ranges::views::filter(optionEnabled) | ranges::to_vector;
 
-			serr() << "The following options are invalid in assembly mode: ";
-			serr() << joinOptionNames(enabledOptions) << ".";
+			string message = "The following options are invalid in assembly mode: " + joinOptionNames(enabledOptions) + ".";
 			if (m_args.count(g_strOptimizeYul) || m_args.count(g_strNoOptimizeYul))
-				serr() << " Optimization is disabled by default and can be enabled with --" << g_strOptimize << "." << endl;
-			serr() << endl;
-			return false;
+				message += " Optimization is disabled by default and can be enabled with --" + g_strOptimize + ".";
+
+			solThrow(CommandLineValidationError, message);
 		}
 
 		// switch to assembly mode
@@ -1121,10 +1138,7 @@ bool CommandLineParser::processArgs()
 			else if (machine == g_strEwasm)
 				m_options.assembly.targetMachine = Machine::Ewasm;
 			else
-			{
-				serr() << "Invalid option for --" << g_strMachine << ": " << machine << endl;
-				return false;
-			}
+				solThrow(CommandLineValidationError, "Invalid option for --" + g_strMachine + ": " + machine);
 		}
 		if (m_options.assembly.targetMachine == Machine::Ewasm && m_options.assembly.inputLanguage == Input::StrictAssembly)
 			m_options.assembly.inputLanguage = Input::Ewasm;
@@ -1137,45 +1151,33 @@ bool CommandLineParser::processArgs()
 			{
 				m_options.assembly.inputLanguage = Input::Ewasm;
 				if (m_options.assembly.targetMachine != Machine::Ewasm)
-				{
-					serr() << "If you select Ewasm as --" << g_strYulDialect << ", ";
-					serr() << "--" << g_strMachine << " has to be Ewasm as well." << endl;
-					return false;
-				}
+					solThrow(
+						CommandLineValidationError,
+						"If you select Ewasm as --" + g_strYulDialect + ", "
+						"--" + g_strMachine + " has to be Ewasm as well."
+					);
 			}
 			else
-			{
-				serr() << "Invalid option for --" << g_strYulDialect << ": " << dialect << endl;
-				return false;
-			}
+				solThrow(CommandLineValidationError, "Invalid option for --" + g_strYulDialect + ": " + dialect);
 		}
 		if (m_options.optimizer.enabled && (m_options.assembly.inputLanguage != Input::StrictAssembly && m_options.assembly.inputLanguage != Input::Ewasm))
-		{
-			serr() <<
-				"Optimizer can only be used for strict assembly. Use --" <<
-				g_strStrictAssembly <<
-				"." <<
-				endl;
-			return false;
-		}
+			solThrow(
+				CommandLineValidationError,
+				"Optimizer can only be used for strict assembly. Use --"  + g_strStrictAssembly + "."
+			);
 		if (m_options.assembly.targetMachine == Machine::Ewasm && m_options.assembly.inputLanguage != Input::StrictAssembly && m_options.assembly.inputLanguage != Input::Ewasm)
-		{
-			serr() << "The selected input language is not directly supported when targeting the Ewasm machine ";
-			serr() << "and automatic translation is not available." << endl;
-			return false;
-		}
-		serr() <<
-			"Warning: Yul is still experimental. Please use the output with care." <<
-			endl;
-
-		return true;
+			solThrow(
+				CommandLineValidationError,
+				"The selected input language is not directly supported when targeting the Ewasm machine "
+				"and automatic translation is not available."
+			);
+		return;
 	}
 	else if (countEnabledOptions({g_strYulDialect, g_strMachine}) >= 1)
-	{
-		serr() << "--" << g_strYulDialect << " and --" << g_strMachine << " ";
-		serr() << "are only valid in assembly mode." << endl;
-		return false;
-	}
+		solThrow(
+			CommandLineValidationError,
+			"--" + g_strYulDialect + " and --" + g_strMachine + " are only valid in assembly mode."
+		);
 
 	if (m_args.count(g_strMetadataHash))
 	{
@@ -1187,10 +1189,7 @@ bool CommandLineParser::processArgs()
 		else if (hashStr == g_strNone)
 			m_options.metadata.hash = CompilerStack::MetadataHash::None;
 		else
-		{
-			serr() << "Invalid option for --" << g_strMetadataHash << ": " << hashStr << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "Invalid option for --" + g_strMetadataHash + ": " + hashStr);
 	}
 
 	if (m_args.count(g_strModelCheckerContracts))
@@ -1198,10 +1197,7 @@ bool CommandLineParser::processArgs()
 		string contractsStr = m_args[g_strModelCheckerContracts].as<string>();
 		optional<ModelCheckerContracts> contracts = ModelCheckerContracts::fromString(contractsStr);
 		if (!contracts)
-		{
-			serr() << "Invalid option for --" << g_strModelCheckerContracts << ": " << contractsStr << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "Invalid option for --" + g_strModelCheckerContracts + ": " + contractsStr);
 		m_options.modelChecker.settings.contracts = move(*contracts);
 	}
 
@@ -1213,11 +1209,17 @@ bool CommandLineParser::processArgs()
 		string engineStr = m_args[g_strModelCheckerEngine].as<string>();
 		optional<ModelCheckerEngine> engine = ModelCheckerEngine::fromString(engineStr);
 		if (!engine)
-		{
-			serr() << "Invalid option for --" << g_strModelCheckerEngine << ": " << engineStr << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "Invalid option for --" + g_strModelCheckerEngine + ": " + engineStr);
 		m_options.modelChecker.settings.engine = *engine;
+	}
+
+	if (m_args.count(g_strModelCheckerInvariants))
+	{
+		string invsStr = m_args[g_strModelCheckerInvariants].as<string>();
+		optional<ModelCheckerInvariants> invs = ModelCheckerInvariants::fromString(invsStr);
+		if (!invs)
+			solThrow(CommandLineValidationError, "Invalid option for --" + g_strModelCheckerInvariants + ": " + invsStr);
+		m_options.modelChecker.settings.invariants = *invs;
 	}
 
 	if (m_args.count(g_strModelCheckerShowUnproved))
@@ -1228,10 +1230,7 @@ bool CommandLineParser::processArgs()
 		string solversStr = m_args[g_strModelCheckerSolvers].as<string>();
 		optional<smtutil::SMTSolverChoice> solvers = smtutil::SMTSolverChoice::fromString(solversStr);
 		if (!solvers)
-		{
-			serr() << "Invalid option for --" << g_strModelCheckerSolvers << ": " << solversStr << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "Invalid option for --" + g_strModelCheckerSolvers + ": " + solversStr);
 		m_options.modelChecker.settings.solvers = *solvers;
 	}
 
@@ -1240,10 +1239,7 @@ bool CommandLineParser::processArgs()
 		string targetsStr = m_args[g_strModelCheckerTargets].as<string>();
 		optional<ModelCheckerTargets> targets = ModelCheckerTargets::fromString(targetsStr);
 		if (!targets)
-		{
-			serr() << "Invalid option for --" << g_strModelCheckerTargets << ": " << targetsStr << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "Invalid option for --" + g_strModelCheckerTargets + ": " + targetsStr);
 		m_options.modelChecker.settings.targets = *targets;
 	}
 
@@ -1255,6 +1251,7 @@ bool CommandLineParser::processArgs()
 		m_args.count(g_strModelCheckerContracts) ||
 		m_args.count(g_strModelCheckerDivModNoSlacks) ||
 		m_args.count(g_strModelCheckerEngine) ||
+		m_args.count(g_strModelCheckerInvariants) ||
 		m_args.count(g_strModelCheckerShowUnproved) ||
 		m_args.count(g_strModelCheckerSolvers) ||
 		m_args.count(g_strModelCheckerTargets) ||
@@ -1263,43 +1260,22 @@ bool CommandLineParser::processArgs()
 	if (m_options.input.mode == InputMode::Compiler)
 		m_options.input.errorRecovery = (m_args.count(g_strErrorRecovery) > 0);
 
-	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
-	return true;
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport);
 }
 
-bool CommandLineParser::parseCombinedJsonOption()
+void CommandLineParser::parseCombinedJsonOption()
 {
 	if (!m_args.count(g_strCombinedJson))
-		return true;
+		return;
 
 	set<string> requests;
 	for (string const& item: boost::split(requests, m_args[g_strCombinedJson].as<string>(), boost::is_any_of(",")))
-		if (!g_combinedJsonArgs.count(item))
-		{
-			serr() << "Invalid option to --" << g_strCombinedJson << ": " << item << endl;
-			return false;
-		}
+		if (CombinedJsonRequests::componentMap().count(item) == 0)
+			solThrow(CommandLineValidationError, "Invalid option to --" + g_strCombinedJson + ": " + item);
 
 	m_options.compiler.combinedJsonRequests = CombinedJsonRequests{};
-	m_options.compiler.combinedJsonRequests->abi = (requests.count(g_strAbi) > 0);
-	m_options.compiler.combinedJsonRequests->metadata = (requests.count("metadata") > 0);
-	m_options.compiler.combinedJsonRequests->binary = (requests.count(g_strBinary) > 0);
-	m_options.compiler.combinedJsonRequests->binaryRuntime = (requests.count(g_strBinaryRuntime) > 0);
-	m_options.compiler.combinedJsonRequests->opcodes = (requests.count(g_strOpcodes) > 0);
-	m_options.compiler.combinedJsonRequests->asm_ = (requests.count(g_strAsm) > 0);
-	m_options.compiler.combinedJsonRequests->storageLayout = (requests.count(g_strStorageLayout) > 0);
-	m_options.compiler.combinedJsonRequests->generatedSources = (requests.count(g_strGeneratedSources) > 0);
-	m_options.compiler.combinedJsonRequests->generatedSourcesRuntime = (requests.count(g_strGeneratedSourcesRuntime) > 0);
-	m_options.compiler.combinedJsonRequests->srcMap = (requests.count(g_strSrcMap) > 0);
-	m_options.compiler.combinedJsonRequests->srcMapRuntime = (requests.count(g_strSrcMapRuntime) > 0);
-	m_options.compiler.combinedJsonRequests->funDebug = (requests.count(g_strFunDebug) > 0);
-	m_options.compiler.combinedJsonRequests->funDebugRuntime = (requests.count(g_strFunDebugRuntime) > 0);
-	m_options.compiler.combinedJsonRequests->signatureHashes = (requests.count(g_strSignatureHashes) > 0);
-	m_options.compiler.combinedJsonRequests->natspecDev = (requests.count(g_strNatspecDev) > 0);
-	m_options.compiler.combinedJsonRequests->natspecUser = (requests.count(g_strNatspecUser) > 0);
-	m_options.compiler.combinedJsonRequests->ast = (requests.count(g_strAst) > 0);
-
-	return true;
+	for (auto&& [componentName, component]: CombinedJsonRequests::componentMap())
+		m_options.compiler.combinedJsonRequests.value().*component = (requests.count(componentName) > 0);
 }
 
 size_t CommandLineParser::countEnabledOptions(vector<string> const& _optionNames) const

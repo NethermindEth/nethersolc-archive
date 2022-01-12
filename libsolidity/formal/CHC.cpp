@@ -23,6 +23,7 @@
 #endif
 
 #include <libsolidity/formal/ArraySlicePredicate.h>
+#include <libsolidity/formal/Invariants.h>
 #include <libsolidity/formal/PredicateInstance.h>
 #include <libsolidity/formal/PredicateSort.h>
 #include <libsolidity/formal/SymbolicTypes.h>
@@ -30,16 +31,19 @@
 #include <libsolidity/ast/TypeProvider.h>
 
 #include <libsmtutil/CHCSmtLib2Interface.h>
+#include <liblangutil/CharStreamProvider.h>
 #include <libsolutil/Algorithms.h>
-
-#include <range/v3/algorithm/for_each.hpp>
-
-#include <range/v3/view/enumerate.hpp>
-#include <range/v3/view/reverse.hpp>
 
 #ifdef HAVE_Z3_DLOPEN
 #include <z3_version.h>
 #endif
+
+#include <boost/algorithm/string.hpp>
+
+#include <range/v3/algorithm/for_each.hpp>
+#include <range/v3/view.hpp>
+#include <range/v3/view/enumerate.hpp>
+#include <range/v3/view/reverse.hpp>
 
 #include <charconv>
 #include <queue>
@@ -787,8 +791,8 @@ void CHC::externalFunctionCall(FunctionCall const& _funCall)
 				valueIndex = i;
 				break;
 			}
-		solAssert(valueIndex, "");
-		state().addBalance(state().thisAddress(), 0 - expr(*callOptions->options().at(*valueIndex)));
+		if (valueIndex)
+			state().addBalance(state().thisAddress(), 0 - expr(*callOptions->options().at(*valueIndex)));
 	}
 
 	auto preCallState = vector<smtutil::Expression>{state().state()} + currentStateVariables();
@@ -968,9 +972,8 @@ void CHC::resetSourceAnalysis()
 {
 	SMTEncoder::resetSourceAnalysis();
 
-	m_safeTargets.clear();
-	m_unsafeTargets.clear();
 	m_unprovedTargets.clear();
+	m_invariants.clear();
 	m_functionTargetIds.clear();
 	m_verificationTargets.clear();
 	m_queryPlaceholders.clear();
@@ -991,7 +994,7 @@ void CHC::resetSourceAnalysis()
 	if (usesZ3)
 	{
 		/// z3::fixedpoint does not have a reset mechanism, so we need to create another.
-		m_interface.reset(new Z3CHCInterface(m_settings.timeout));
+		m_interface = std::make_unique<Z3CHCInterface>(m_settings.timeout);
 		auto z3Interface = dynamic_cast<Z3CHCInterface const*>(m_interface.get());
 		solAssert(z3Interface, "");
 		m_context.setSolver(z3Interface->z3Interface());
@@ -1128,8 +1131,8 @@ void CHC::defineInterfacesAndSummaries(SourceUnit const& _source)
 		if (auto const* contract = dynamic_cast<ContractDefinition const*>(node.get()))
 		{
 			string suffix = contract->name() + "_" + to_string(contract->id());
-			m_interfaces[contract] = createSymbolicBlock(interfaceSort(*contract, state()), "interface_" + uniquePrefix() + "_" + suffix, PredicateType::Interface, contract);
-			m_nondetInterfaces[contract] = createSymbolicBlock(nondetInterfaceSort(*contract, state()), "nondet_interface_" + uniquePrefix() + "_" + suffix, PredicateType::NondetInterface, contract);
+			m_interfaces[contract] = createSymbolicBlock(interfaceSort(*contract, state()), "interface_" + uniquePrefix() + "_" + suffix, PredicateType::Interface, contract, contract);
+			m_nondetInterfaces[contract] = createSymbolicBlock(nondetInterfaceSort(*contract, state()), "nondet_interface_" + uniquePrefix() + "_" + suffix, PredicateType::NondetInterface, contract, contract);
 			m_constructorSummaries[contract] = createConstructorBlock(*contract, "summary_constructor");
 
 			for (auto const* var: stateVariablesIncludingInheritedAndPrivate(*contract))
@@ -1527,11 +1530,12 @@ void CHC::addRule(smtutil::Expression const& _rule, string const& _ruleName)
 	m_interface->addRule(_rule, _ruleName);
 }
 
-pair<CheckResult, CHCSolverInterface::CexGraph> CHC::query(smtutil::Expression const& _query, langutil::SourceLocation const& _location)
+tuple<CheckResult, smtutil::Expression, CHCSolverInterface::CexGraph> CHC::query(smtutil::Expression const& _query, langutil::SourceLocation const& _location)
 {
 	CheckResult result;
+	smtutil::Expression invariant(true);
 	CHCSolverInterface::CexGraph cex;
-	tie(result, cex) = m_interface->query(_query);
+	tie(result, invariant, cex) = m_interface->query(_query);
 	switch (result)
 	{
 	case CheckResult::SATISFIABLE:
@@ -1546,8 +1550,9 @@ pair<CheckResult, CHCSolverInterface::CexGraph> CHC::query(smtutil::Expression c
 			spacer->setSpacerOptions(false);
 
 			CheckResult resultNoOpt;
+			smtutil::Expression invariantNoOpt(true);
 			CHCSolverInterface::CexGraph cexNoOpt;
-			tie(resultNoOpt, cexNoOpt) = m_interface->query(_query);
+			tie(resultNoOpt, invariantNoOpt, cexNoOpt) = m_interface->query(_query);
 
 			if (resultNoOpt == CheckResult::SATISFIABLE)
 				cex = move(cexNoOpt);
@@ -1568,7 +1573,7 @@ pair<CheckResult, CHCSolverInterface::CexGraph> CHC::query(smtutil::Expression c
 		m_errorReporter.warning(1218_error, _location, "CHC: Error trying to invoke SMT solver.");
 		break;
 	}
-	return {result, cex};
+	return {result, invariant, cex};
 }
 
 void CHC::verificationTargetEncountered(
@@ -1616,27 +1621,22 @@ void CHC::checkVerificationTargets()
 	// Also, all possible contexts in which an external function can be called has been recorded (m_queryPlaceholders).
 	// Here we combine every context in which an external function can be called with all possible verification conditions
 	// in its call graph. Each such combination forms a unique verification target.
-	vector<CHCVerificationTarget> verificationTargets;
+	map<unsigned, vector<CHCQueryPlaceholder>> targetEntryPoints;
 	for (auto const& [function, placeholders]: m_queryPlaceholders)
 	{
 		auto functionTargets = transactionVerificationTargetsIds(function);
 		for (auto const& placeholder: placeholders)
 			for (unsigned id: functionTargets)
-			{
-				auto const& target = m_verificationTargets.at(id);
-				verificationTargets.push_back(CHCVerificationTarget{
-					{target.type, placeholder.fromPredicate, placeholder.constraints && placeholder.errorExpression == target.errorId},
-					target.errorId,
-					target.errorNode
-				});
-			}
+				targetEntryPoints[id].push_back(placeholder);
 	}
 
 	set<unsigned> checkedErrorIds;
-	for (auto const& target: verificationTargets)
+	for (auto const& [targetId, placeholders]: targetEntryPoints)
 	{
 		string errorType;
 		ErrorId errorReporterId;
+
+		auto const& target = m_verificationTargets.at(targetId);
 
 		if (target.type == VerificationTargetType::PopEmptyArray)
 		{
@@ -1685,7 +1685,7 @@ void CHC::checkVerificationTargets()
 		else
 			solAssert(false, "");
 
-		checkAndReportTarget(target, errorReporterId, errorType + " happens here.", errorType + " might happen here.");
+		checkAndReportTarget(target, placeholders, errorReporterId, errorType + " happens here.", errorType + " might happen here.");
 		checkedErrorIds.insert(target.errorId);
 	}
 
@@ -1715,6 +1715,47 @@ void CHC::checkVerificationTargets()
 			" Consider increasing the timeout per query."
 		);
 
+	if (!m_settings.invariants.invariants.empty())
+	{
+		string msg;
+		for (auto pred: m_invariants | ranges::views::keys)
+		{
+			ASTNode const* node = pred->programNode();
+			string what;
+			if (auto contract = dynamic_cast<ContractDefinition const*>(node))
+				what = contract->fullyQualifiedName();
+			else
+				solAssert(false, "");
+
+			string invType;
+			if (pred->type() == PredicateType::Interface)
+				invType = "Contract invariant(s)";
+			else if (pred->type() == PredicateType::NondetInterface)
+				invType = "Reentrancy property(ies)";
+			else
+				solAssert(false, "");
+
+			msg += invType + " for " + what + ":\n";
+			for (auto const& inv: m_invariants.at(pred))
+				msg += inv + "\n";
+		}
+		if (msg.find("<errorCode>") != string::npos)
+		{
+			set<unsigned> seenErrors;
+			msg += "<errorCode> = 0 -> no errors\n";
+			for (auto const& [id, target]: m_verificationTargets)
+				if (!seenErrors.count(target.errorId))
+				{
+					seenErrors.insert(target.errorId);
+					string loc = string(m_charStreamProvider.charStream(*target.errorNode->location().sourceName).text(target.errorNode->location()));
+					msg += "<errorCode> = " + to_string(target.errorId) + " -> " + ModelCheckerTargets::targetTypeToString.at(target.type) + " at " + loc + "\n";
+
+				}
+		}
+		if (!msg.empty())
+			m_errorReporter.info(1180_error, msg);
+	}
+
 	// There can be targets in internal functions that are not reachable from the external interface.
 	// These are safe by definition and are not even checked by the CHC engine, but this information
 	// must still be reported safe by the BMC engine.
@@ -1737,6 +1778,7 @@ void CHC::checkVerificationTargets()
 
 void CHC::checkAndReportTarget(
 	CHCVerificationTarget const& _target,
+	vector<CHCQueryPlaceholder> const& _placeholders,
 	ErrorId _errorReporterId,
 	string _satMsg,
 	string _unknownMsg
@@ -1746,11 +1788,26 @@ void CHC::checkAndReportTarget(
 		return;
 
 	createErrorBlock();
-	connectBlocks(_target.value, error(), _target.constraints);
+	for (auto const& placeholder: _placeholders)
+		connectBlocks(
+			placeholder.fromPredicate,
+			error(),
+			placeholder.constraints && placeholder.errorExpression == _target.errorId
+		);
 	auto const& location = _target.errorNode->location();
-	auto const& [result, model] = query(error(), location);
+	auto [result, invariant, model] = query(error(), location);
 	if (result == CheckResult::UNSATISFIABLE)
+	{
 		m_safeTargets[_target.errorNode].insert(_target.type);
+		set<Predicate const*> predicates;
+		for (auto const* pred: m_interfaces | ranges::views::values)
+			predicates.insert(pred);
+		for (auto const* pred: m_nondetInterfaces | ranges::views::values)
+			predicates.insert(pred);
+		map<Predicate const*, set<string>> invariants = collectInvariants(invariant, predicates, m_settings.invariants);
+		for (auto pred: invariants | ranges::views::keys)
+			m_invariants[pred] += move(invariants.at(pred));
+	}
 	else if (result == CheckResult::SATISFIABLE)
 	{
 		solAssert(!_satMsg.empty(), "");
@@ -1892,7 +1949,10 @@ optional<string> CHC::generateCounterexample(CHCSolverInterface::CexGraph const&
 			if (!pred->isConstructorSummary())
 				for (unsigned v: callGraph[node])
 					_dfs(node, v, depth + 1, _dfs);
-			calls.push_front(string(depth * 4, ' ') + pred->formatSummaryCall(nodeArgs(node), m_charStreamProvider));
+
+			bool appendTxVars = pred->isConstructorSummary() || pred->isFunctionSummary() || pred->isExternalCallUntrusted();
+
+			calls.push_front(string(depth * 4, ' ') + pred->formatSummaryCall(nodeArgs(node), m_charStreamProvider, appendTxVars));
 			if (pred->isInternalCall())
 				calls.front() += " -- internal call";
 			else if (pred->isExternalCallTrusted())

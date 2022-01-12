@@ -19,6 +19,8 @@
 #include <test/libsolidity/SMTCheckerTest.h>
 #include <test/Common.h>
 
+#include <range/v3/action/remove_if.hpp>
+
 using namespace std;
 using namespace solidity;
 using namespace solidity::langutil;
@@ -66,6 +68,29 @@ SMTCheckerTest::SMTCheckerTest(string const& _filename): SyntaxTest(_filename, E
 		m_ignoreCex = true;
 	else
 		BOOST_THROW_EXCEPTION(runtime_error("Invalid SMT counterexample choice."));
+
+	auto const& ignoreInv = m_reader.stringSetting("SMTIgnoreInv", "no");
+	if (ignoreInv == "no")
+		m_modelCheckerSettings.invariants = ModelCheckerInvariants::All();
+	else if (ignoreInv == "yes")
+		m_modelCheckerSettings.invariants = ModelCheckerInvariants::None();
+	else
+		BOOST_THROW_EXCEPTION(runtime_error("Invalid SMT invariant choice."));
+
+	auto const& ignoreOSSetting = m_reader.stringSetting("SMTIgnoreOS", "none");
+	for (string const& os: ignoreOSSetting | ranges::views::split(',') | ranges::to<vector<string>>())
+	{
+#ifdef __APPLE__
+		if (os == "macos")
+			m_shouldRun = false;
+#elif _WIN32
+		if (os == "windows")
+			m_shouldRun = false;
+#elif __linux__
+		if (os == "linux")
+			m_shouldRun = false;
+#endif
+	}
 }
 
 TestCase::TestResult SMTCheckerTest::run(ostream& _stream, string const& _linePrefix, bool _formatted)
