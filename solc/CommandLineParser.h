@@ -24,8 +24,12 @@
 #include <libsolidity/interface/DebugSettings.h>
 #include <libsolidity/interface/FileReader.h>
 #include <libsolidity/interface/ImportRemapper.h>
+
 #include <libyul/AssemblyStack.h>
+
+#include <liblangutil/DebugInfoSelection.h>
 #include <liblangutil/EVMVersion.h>
+
 #include <libsolutil/JSON.h>
 
 #include <boost/program_options.hpp>
@@ -44,17 +48,46 @@ namespace solidity::frontend
 
 enum class InputMode
 {
+	Help,
+	License,
+	Version,
 	Compiler,
 	CompilerWithASTImport,
 	StandardJson,
 	Linker,
 	Assembler,
+	LanguageServer
 };
 
 struct CompilerOutputs
 {
 	bool operator!=(CompilerOutputs const& _other) const noexcept { return !(*this == _other); }
 	bool operator==(CompilerOutputs const& _other) const noexcept;
+	friend std::ostream& operator<<(std::ostream& _out, CompilerOutputs const& _requests);
+
+	static std::string const& componentName(bool CompilerOutputs::* _component);
+	static auto const& componentMap()
+	{
+		static std::map<std::string, bool CompilerOutputs::*> const components = {
+			{"ast-compact-json", &CompilerOutputs::astCompactJson},
+			{"asm", &CompilerOutputs::asm_},
+			{"asm-json", &CompilerOutputs::asmJson},
+			{"opcodes", &CompilerOutputs::opcodes},
+			{"bin", &CompilerOutputs::binary},
+			{"bin-runtime", &CompilerOutputs::binaryRuntime},
+			{"abi", &CompilerOutputs::abi},
+			{"ir", &CompilerOutputs::ir},
+			{"ir-optimized", &CompilerOutputs::irOptimized},
+			{"ewasm", &CompilerOutputs::ewasm},
+			{"ewasm-ir", &CompilerOutputs::ewasmIR},
+			{"hashes", &CompilerOutputs::signatureHashes},
+			{"userdoc", &CompilerOutputs::natspecUser},
+			{"devdoc", &CompilerOutputs::natspecDev},
+			{"metadata", &CompilerOutputs::metadata},
+			{"storage-layout", &CompilerOutputs::storageLayout},
+		};
+		return components;
+	}
 
 	bool astCompactJson = false;
 	bool asm_ = false;
@@ -66,6 +99,7 @@ struct CompilerOutputs
 	bool ir = false;
 	bool irOptimized = false;
 	bool ewasm = false;
+	bool ewasmIR = false;
 	bool signatureHashes = false;
 	bool natspecUser = false;
 	bool natspecDev = false;
@@ -77,6 +111,32 @@ struct CombinedJsonRequests
 {
 	bool operator!=(CombinedJsonRequests const& _other) const noexcept { return !(*this == _other); }
 	bool operator==(CombinedJsonRequests const& _other) const noexcept;
+	friend std::ostream& operator<<(std::ostream& _out, CombinedJsonRequests const& _requests);
+
+	static std::string const& componentName(bool CombinedJsonRequests::* _component);
+	static auto const& componentMap()
+	{
+		static std::map<std::string, bool CombinedJsonRequests::*> const components = {
+			{"abi", &CombinedJsonRequests::abi},
+			{"metadata", &CombinedJsonRequests::metadata},
+			{"bin", &CombinedJsonRequests::binary},
+			{"bin-runtime", &CombinedJsonRequests::binaryRuntime},
+			{"opcodes", &CombinedJsonRequests::opcodes},
+			{"asm", &CombinedJsonRequests::asm_},
+			{"storage-layout", &CombinedJsonRequests::storageLayout},
+			{"generated-sources", &CombinedJsonRequests::generatedSources},
+			{"generated-sources-runtime", &CombinedJsonRequests::generatedSourcesRuntime},
+			{"srcmap", &CombinedJsonRequests::srcMap},
+			{"srcmap-runtime", &CombinedJsonRequests::srcMapRuntime},
+			{"function-debug", &CombinedJsonRequests::funDebug},
+			{"function-debug-runtime", &CombinedJsonRequests::funDebugRuntime},
+			{"hashes", &CombinedJsonRequests::signatureHashes},
+			{"devdoc", &CombinedJsonRequests::natspecDev},
+			{"userdoc", &CombinedJsonRequests::natspecUser},
+			{"ast", &CombinedJsonRequests::ast},
+		};
+		return components;
+	}
 
 	bool abi = false;
 	bool metadata = false;
@@ -124,6 +184,7 @@ struct CommandLineOptions
 		langutil::EVMVersion evmVersion;
 		bool experimentalViaIR = false;
 		RevertStrings revertStrings = RevertStrings::Default;
+		std::optional<langutil::DebugInfoSelection> debugInfoSelection;
 		CompilerStack::State stopAfter = CompilerStack::State::CompilationSuccessful;
 	} output;
 
@@ -174,34 +235,18 @@ struct CommandLineOptions
 };
 
 /// Parses the command-line arguments and produces a filled-out CommandLineOptions structure.
-/// Validates provided values and prints error messages in case of errors.
-///
-/// The class is also responsible for handling options that only result in printing informational
-/// text, without the need to invoke the compiler - printing usage banner, version or license.
+/// Validates provided values and reports errors by throwing @p CommandLineValidationErrors.
 class CommandLineParser
 {
 public:
-	explicit CommandLineParser(std::ostream& _sout, std::ostream& _serr):
-		m_sout(_sout),
-		m_serr(_serr)
-	{}
-
 	/// Parses the command-line arguments and fills out the internal CommandLineOptions structure.
-	/// Performs validation and prints error messages. If requested, prints usage banner, version
-	/// or license.
-	/// @param interactiveTerminal specifies whether the terminal is taking input from the user.
-	/// This is used to determine whether to provide more user-friendly output in some situations.
-	/// E.g. whether to print help text when no arguments are provided.
-	/// @return true if there were no validation errors when parsing options and the
-	/// CommandLineOptions structure has been fully initialized. false if there were errors - in
-	/// this case CommandLineOptions may be only partially filled out. May also return false if
-	/// there is not further processing necessary and the program should just exit.
-	bool parse(int _argc, char const* const* _argv, bool _interactiveTerminal);
+	/// @throws CommandLineValidationError if the arguments cannot be properly parsed or are invalid.
+	/// When an exception is thrown, the @p CommandLineOptions may be only partially filled out.
+	void parse(int _argc, char const* const* _argv);
 
 	CommandLineOptions const& options() const { return m_options; }
 
-	/// Returns true if the parser has written anything to any of its output streams.
-	bool hasOutput() const { return m_hasOutput; }
+	static void printHelp(std::ostream& _out) { _out << optionsDescription(); }
 
 private:
 	/// @returns a specification of all named command-line options accepted by the compiler.
@@ -215,44 +260,31 @@ private:
 	/// Uses boost::program_options to parse the command-line arguments and leaves the result in @a m_args.
 	/// Also handles the arguments that result in information being printed followed by immediate exit.
 	/// @returns false if parsing fails due to syntactical errors or the arguments not matching the description.
-	bool parseArgs(int _argc, char const* const* _argv, bool _interactiveTerminal);
+	void parseArgs(int _argc, char const* const* _argv);
 
 	/// Validates parsed arguments stored in @a m_args and fills out the internal CommandLineOptions
 	/// structure.
-	/// @return false if there are any validation errors, true otherwise.
-	bool processArgs();
+	/// @throws CommandLineValidationError in case of validation errors.
+	void processArgs();
 
 	/// Parses the value supplied to --combined-json.
-	/// @return false if there are any validation errors, true otherwise.
-	bool parseCombinedJsonOption();
+	/// @throws CommandLineValidationError in case of validation errors.
+	void parseCombinedJsonOption();
 
-	/// Parses the names of the input files, remappings for all modes except for Standard JSON.
-	/// Does not check if files actually exist.
-	/// @return false if there are any validation errors, true otherwise.
-	bool parseInputPathsAndRemappings();
+	/// Parses the names of the input files, remappings. Does not check if the files actually exist.
+	/// @throws CommandLineValidationError in case of validation errors.
+	void parseInputPathsAndRemappings();
 
 	/// Tries to read from the file @a _input or interprets @a _input literally if that fails.
-	/// It then tries to parse the contents and appends to m_options.libraries.
-	/// @return false if there are any validation errors, true otherwise.
-	bool parseLibraryOption(std::string const& _input);
+	/// It then tries to parse the contents and appends to @a m_options.libraries.
+	/// @throws CommandLineValidationError in case of validation errors.
+	void parseLibraryOption(std::string const& _input);
 
-	bool checkMutuallyExclusive(std::vector<std::string> const& _optionNames);
-	[[noreturn]] void printVersionAndExit();
-	[[noreturn]] void printLicenseAndExit();
+	void parseOutputSelection();
+
+	void checkMutuallyExclusive(std::vector<std::string> const& _optionNames);
 	size_t countEnabledOptions(std::vector<std::string> const& _optionNames) const;
 	static std::string joinOptionNames(std::vector<std::string> const& _optionNames, std::string _separator = ", ");
-
-	/// Returns the stream that should receive normal output. Sets m_hasOutput to true if the
-	/// stream has ever been used.
-	std::ostream& sout();
-
-	/// Returns the stream that should receive error output. Sets m_hasOutput to true if the
-	/// stream has ever been used.
-	std::ostream& serr();
-
-	std::ostream& m_sout;
-	std::ostream& m_serr;
-	bool m_hasOutput = false;
 
 	CommandLineOptions m_options;
 

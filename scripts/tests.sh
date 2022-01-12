@@ -38,7 +38,8 @@ source "${REPO_ROOT}/scripts/common.sh"
 WORKDIR=$(mktemp -d)
 CMDLINE_PID=
 
-cleanup() {
+function cleanup
+{
     # ensure failing commands don't cause termination during cleanup (especially within safe_kill)
     set +e
 
@@ -81,6 +82,9 @@ done
 
 printTask "Testing Python scripts..."
 "$REPO_ROOT/test/pyscriptTests.py"
+
+printTask "Testing LSP..."
+"$REPO_ROOT/scripts/test_solidity_lsp.py" "${SOLIDITY_BUILD_DIR}/solc/solc"
 
 printTask "Running commandline tests..."
 # Only run in parallel if this is run on CI infrastructure

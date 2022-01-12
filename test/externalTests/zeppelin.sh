@@ -18,25 +18,44 @@
 #
 # (c) 2019 solidity contributors.
 #------------------------------------------------------------------------------
+
+set -e
+
 source scripts/common.sh
 source test/externalTests/common.sh
 
-verify_input "$1"
-SOLJSON="$1"
+verify_input "$@"
+BINARY_TYPE="$1"
+BINARY_PATH="$2"
 
-function install_fn { npm install; }
-function compile_fn { npx truffle compile; }
-function test_fn { npm run test; }
+function compile_fn { npm run compile; }
+function test_fn { npm test; }
 
 function zeppelin_test
 {
-    OPTIMIZER_LEVEL=1
-    CONFIG="truffle-config.js"
+    local repo="https://github.com/OpenZeppelin/openzeppelin-contracts.git"
+    local branch=master
+    local config_file="hardhat.config.js"
+    local min_optimizer_level=1
+    local max_optimizer_level=3
 
-    truffle_setup "$SOLJSON" https://github.com/solidity-external-tests/openzeppelin-contracts.git master_080
-    run_install "$SOLJSON" install_fn
+    local selected_optimizer_levels
+    selected_optimizer_levels=$(circleci_select_steps "$(seq "$min_optimizer_level" "$max_optimizer_level")")
+    print_optimizer_levels_or_exit "$selected_optimizer_levels"
 
-    truffle_run_test "$SOLJSON" compile_fn test_fn
+    setup_solc "$DIR" "$BINARY_TYPE" "$BINARY_PATH"
+    download_project "$repo" "$branch" "$DIR"
+
+    neutralize_package_json_hooks
+    force_hardhat_compiler_binary "$config_file" "$BINARY_TYPE" "$BINARY_PATH"
+    force_hardhat_compiler_settings "$config_file" "$min_optimizer_level"
+    npm install
+
+    replace_version_pragmas
+
+    for level in $selected_optimizer_levels; do
+        hardhat_run_test "$config_file" "$level" compile_fn test_fn
+    done
 }
 
 external_test Zeppelin zeppelin_test

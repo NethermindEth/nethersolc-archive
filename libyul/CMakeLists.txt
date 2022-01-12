@@ -34,9 +34,14 @@ add_library(yul
 	AssemblyStack.cpp
 	CompilabilityChecker.cpp
 	CompilabilityChecker.h
+	ControlFlowSideEffects.h
+	ControlFlowSideEffectsCollector.cpp
+	ControlFlowSideEffectsCollector.h
 	Dialect.cpp
 	Dialect.h
 	Exceptions.h
+	FunctionReferenceResolver.cpp
+	FunctionReferenceResolver.h
 	Object.cpp
 	Object.h
 	ObjectParser.cpp
@@ -137,8 +142,6 @@ add_library(yul
 	optimiser/FullInliner.h
 	optimiser/FunctionCallFinder.cpp
 	optimiser/FunctionCallFinder.h
-	optimiser/FunctionDefinitionCollector.cpp
-	optimiser/FunctionDefinitionCollector.h
 	optimiser/FunctionGrouper.cpp
 	optimiser/FunctionGrouper.h
 	optimiser/FunctionHoister.cpp
@@ -170,10 +173,10 @@ add_library(yul
 	optimiser/OptimizerUtilities.h
 	optimiser/ReasoningBasedSimplifier.cpp
 	optimiser/ReasoningBasedSimplifier.h
-	optimiser/RedundantAssignEliminator.cpp
-	optimiser/RedundantAssignEliminator.h
-	optimiser/RedundantStoreBase.cpp
-	optimiser/RedundantStoreBase.h
+	optimiser/UnusedAssignEliminator.cpp
+	optimiser/UnusedAssignEliminator.h
+	optimiser/UnusedStoreBase.cpp
+	optimiser/UnusedStoreBase.h
 	optimiser/Rematerialiser.cpp
 	optimiser/Rematerialiser.h
 	optimiser/SMTSolver.cpp
@@ -216,4 +219,4 @@ add_library(yul
 	optimiser/VarNameCleaner.h
 )
 
-target_link_libraries(yul PUBLIC evmasm solutil langutil smtutil)
+target_link_libraries(yul PUBLIC evmasm solutil langutil smtutil fmt::fmt-header-only)

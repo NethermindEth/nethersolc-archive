@@ -80,8 +80,10 @@ Global Variables
   the given arguments. Note that this encoding can be ambiguous!
 - ``abi.encodeWithSelector(bytes4 selector, ...) returns (bytes memory)``: :ref:`ABI <ABI>`-encodes
   the given arguments starting from the second and prepends the given four-byte selector
+- ``abi.encodeCall(function functionPointer, (...)) returns (bytes memory)``: ABI-encodes a call to ``functionPointer`` with the arguments found in the
+  tuple. Performs a full type-check, ensuring the types match the function signature. Result equals ``abi.encodeWithSelector(functionPointer.selector, (...))``
 - ``abi.encodeWithSignature(string memory signature, ...) returns (bytes memory)``: Equivalent
-  to ``abi.encodeWithSelector(bytes4(keccak256(bytes(signature)), ...)```
+  to ``abi.encodeWithSelector(bytes4(keccak256(bytes(signature)), ...)``
 - ``bytes.concat(...) returns (bytes memory)``: :ref:`Concatenates variable number of
   arguments to one byte array<bytes-concat>`
 - ``block.basefee`` (``uint``): current block's base fee (`EIP-3198 <https://eips.ethereum.org/EIPS/eip-3198>`_ and `EIP-1559 <https://eips.ethereum.org/EIPS/eip-1559>`_)
@@ -129,6 +131,12 @@ Global Variables
 - ``type(I).interfaceId`` (``bytes4``): value containing the EIP-165 interface identifier of the given interface, see :ref:`Type Information<meta-type>`.
 - ``type(T).min`` (``T``): the minimum value representable by the integer type ``T``, see :ref:`Type Information<meta-type>`.
 - ``type(T).max`` (``T``): the maximum value representable by the integer type ``T``, see :ref:`Type Information<meta-type>`.
+
+.. note::
+    When contracts are evaluated off-chain rather than in context of a transaction included in a
+    block, you should not assume that ``block.*`` and ``tx.*`` refer to values from any specific
+    block or transaction. These values are provided by the EVM implementation that executes the
+    contract and can be arbitrary.
 
 .. note::
     Do not rely on ``block.timestamp`` or ``blockhash`` as a source of randomness,

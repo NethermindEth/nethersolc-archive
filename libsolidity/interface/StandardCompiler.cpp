@@ -28,9 +28,13 @@
 #include <libyul/AssemblyStack.h>
 #include <libyul/Exceptions.h>
 #include <libyul/optimiser/Suite.h>
-#include <liblangutil/SourceReferenceFormatter.h>
+
 #include <libevmasm/Instruction.h>
+
 #include <libsmtutil/Exceptions.h>
+
+#include <liblangutil/SourceReferenceFormatter.h>
+
 #include <libsolutil/JSON.h>
 #include <libsolutil/Keccak256.h>
 #include <libsolutil/CommonData.h>
@@ -125,7 +129,7 @@ Json::Value formatErrorWithException(
 		_charStreamProvider
 	);
 
-	if (string const* description = boost::get_error_info<util::errinfo_comment>(_exception))
+	if (string const* description = _exception.comment())
 		message = ((_message.length() > 0) ? (_message + ":") : "") + *description;
 	else
 		message = _message;
@@ -441,7 +445,7 @@ std::optional<Json::Value> checkSettingsKeys(Json::Value const& _input)
 
 std::optional<Json::Value> checkModelCheckerSettingsKeys(Json::Value const& _input)
 {
-	static set<string> keys{"contracts", "divModNoSlacks", "engine", "showUnproved", "solvers", "targets", "timeout"};
+	static set<string> keys{"contracts", "divModNoSlacks", "engine", "invariants", "showUnproved", "solvers", "targets", "timeout"};
 	return checkKeys(_input, keys, "modelChecker");
 }
 
@@ -793,7 +797,7 @@ std::variant<StandardCompiler::InputsAndSettings, Json::Value> StandardCompiler:
 
 	if (settings.isMember("debug"))
 	{
-		if (auto result = checkKeys(settings["debug"], {"revertStrings"}, "settings.debug"))
+		if (auto result = checkKeys(settings["debug"], {"revertStrings", "debugInfo"}, "settings.debug"))
 			return *result;
 
 		if (settings["debug"].isMember("revertStrings"))
@@ -809,6 +813,31 @@ std::variant<StandardCompiler::InputsAndSettings, Json::Value> StandardCompiler:
 					"Only \"default\", \"strip\" and \"debug\" are implemented for settings.debug.revertStrings for now."
 				);
 			ret.revertStrings = *revertStrings;
+		}
+
+		if (settings["debug"].isMember("debugInfo"))
+		{
+			if (!settings["debug"]["debugInfo"].isArray())
+				return formatFatalError("JSONError", "settings.debug.debugInfo must be an array.");
+
+			vector<string> components;
+			for (Json::Value const& arrayValue: settings["debug"]["debugInfo"])
+				components.push_back(arrayValue.asString());
+
+			optional<DebugInfoSelection> debugInfoSelection = DebugInfoSelection::fromComponents(
+				components,
+				true /* _acceptWildcards */
+			);
+			if (!debugInfoSelection.has_value())
+				return formatFatalError("JSONError", "Invalid value in settings.debug.debugInfo.");
+
+			if (debugInfoSelection->snippet && !debugInfoSelection->location)
+				return formatFatalError(
+					"JSONError",
+					"To use 'snippet' with settings.debug.debugInfo you must select also 'location'."
+				);
+
+			ret.debugInfoSelection = debugInfoSelection.value();
 		}
 	}
 
@@ -958,6 +987,27 @@ std::variant<StandardCompiler::InputsAndSettings, Json::Value> StandardCompiler:
 		ret.modelCheckerSettings.engine = *engine;
 	}
 
+	if (modelCheckerSettings.isMember("invariants"))
+	{
+		auto const& invariantsArray = modelCheckerSettings["invariants"];
+		if (!invariantsArray.isArray())
+			return formatFatalError("JSONError", "settings.modelChecker.invariants must be an array.");
+
+		ModelCheckerInvariants invariants;
+		for (auto const& i: invariantsArray)
+		{
+			if (!i.isString())
+				return formatFatalError("JSONError", "Every invariant type in settings.modelChecker.invariants must be a string.");
+			if (!invariants.setFromString(i.asString()))
+				return formatFatalError("JSONError", "Invalid model checker invariants requested.");
+		}
+
+		if (invariants.invariants.empty())
+			return formatFatalError("JSONError", "settings.modelChecker.invariants must be a non-empty array.");
+
+		ret.modelCheckerSettings.invariants = invariants;
+	}
+
 	if (modelCheckerSettings.isMember("showUnproved"))
 	{
 		auto const& showUnproved = modelCheckerSettings["showUnproved"];
@@ -1029,6 +1079,8 @@ Json::Value StandardCompiler::compileSolidity(StandardCompiler::InputsAndSetting
 	compilerStack.setRemappings(move(_inputsAndSettings.remappings));
 	compilerStack.setOptimiserSettings(std::move(_inputsAndSettings.optimiserSettings));
 	compilerStack.setRevertStringBehaviour(_inputsAndSettings.revertStrings);
+	if (_inputsAndSettings.debugInfoSelection.has_value())
+		compilerStack.selectDebugInfo(_inputsAndSettings.debugInfoSelection.value());
 	compilerStack.setLibraries(_inputsAndSettings.libraries);
 	compilerStack.useMetadataLiteralSources(_inputsAndSettings.metadataLiteralSources);
 	compilerStack.setMetadataHash(_inputsAndSettings.metadataHash);
@@ -1151,13 +1203,13 @@ Json::Value StandardCompiler::compileSolidity(StandardCompiler::InputsAndSetting
 			"Exception during compilation: " + boost::diagnostic_information(_exception)
 		));
 	}
-	catch (std::exception const& _e)
+	catch (std::exception const& _exception)
 	{
 		errors.append(formatError(
 			Error::Severity::Error,
 			"Exception",
 			"general",
-			"Unknown exception during compilation" + (_e.what() ? ": " + string(_e.what()) : ".")
+			"Unknown exception during compilation: " + boost::diagnostic_information(_exception)
 		));
 	}
 	catch (...)
@@ -1166,7 +1218,7 @@ Json::Value StandardCompiler::compileSolidity(StandardCompiler::InputsAndSetting
 			Error::Severity::Error,
 			"Exception",
 			"general",
-			"Unknown exception during compilation."
+			"Unknown exception during compilation: " + boost::current_exception_diagnostic_information()
 		));
 	}
 
@@ -1358,7 +1410,10 @@ Json::Value StandardCompiler::compileYul(InputsAndSettings _inputsAndSettings)
 	AssemblyStack stack(
 		_inputsAndSettings.evmVersion,
 		AssemblyStack::Language::StrictAssembly,
-		_inputsAndSettings.optimiserSettings
+		_inputsAndSettings.optimiserSettings,
+		_inputsAndSettings.debugInfoSelection.has_value() ?
+			_inputsAndSettings.debugInfoSelection.value() :
+			DebugInfoSelection::Default()
 	);
 	string const& sourceName = _inputsAndSettings.sources.begin()->first;
 	string const& sourceContents = _inputsAndSettings.sources.begin()->second;
@@ -1481,7 +1536,7 @@ Json::Value StandardCompiler::compile(Json::Value const& _input) noexcept
 	}
 	catch (...)
 	{
-		return formatFatalError("InternalCompilerError", "Internal exception in StandardCompiler::compile");
+		return formatFatalError("InternalCompilerError", "Internal exception in StandardCompiler::compile: " +  boost::current_exception_diagnostic_information());
 	}
 }
 

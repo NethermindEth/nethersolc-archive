@@ -26,10 +26,13 @@
 #include <libsolidity/ast/TypeProvider.h>
 
 #include <boost/algorithm/string/join.hpp>
+#include <boost/algorithm/string.hpp>
+
 #include <range/v3/view.hpp>
 #include <utility>
 
 using namespace std;
+using boost::algorithm::starts_with;
 using namespace solidity;
 using namespace solidity::smtutil;
 using namespace solidity::frontend;
@@ -198,9 +201,15 @@ bool Predicate::isInterface() const
 	return m_type == PredicateType::Interface;
 }
 
+bool Predicate::isNondetInterface() const
+{
+	return m_type == PredicateType::NondetInterface;
+}
+
 string Predicate::formatSummaryCall(
 	vector<smtutil::Expression> const& _args,
-	langutil::CharStreamProvider const& _charStreamProvider
+	langutil::CharStreamProvider const& _charStreamProvider,
+	bool _appendTxVars
 ) const
 {
 	solAssert(isSummary(), "");
@@ -214,19 +223,67 @@ string Predicate::formatSummaryCall(
 	}
 
 	/// The signature of a function summary predicate is: summary(error, this, abiFunctions, cryptoFunctions, txData, preBlockChainState, preStateVars, preInputVars, postBlockchainState, postStateVars, postInputVars, outputVars).
-	/// Here we are interested in preInputVars to format the function call,
-	/// and in txData to retrieve `msg.value`.
+	/// Here we are interested in preInputVars to format the function call.
 
-	string value;
-	if (auto v = readTxVars(_args.at(4)).at("msg.value"))
+	string txModel;
+
+	if (_appendTxVars)
 	{
-		bigint x(*v);
-		if (x > 0)
-			value = "{ value: " + *v + " }";
+		set<string> txVars;
+		if (isFunctionSummary())
+		{
+			solAssert(programFunction(), "");
+			if (programFunction()->isPayable())
+				txVars.insert("msg.value");
+		}
+		else if (isConstructorSummary())
+		{
+			FunctionDefinition const* fun = programFunction();
+			if (fun && fun->isPayable())
+				txVars.insert("msg.value");
+		}
+
+		struct TxVarsVisitor: public ASTConstVisitor
+		{
+			bool visit(MemberAccess const& _memberAccess)
+			{
+				Expression const* memberExpr = SMTEncoder::innermostTuple(_memberAccess.expression());
+
+				Type const* exprType = memberExpr->annotation().type;
+				solAssert(exprType, "");
+				if (exprType->category() == Type::Category::Magic)
+					if (auto const* identifier = dynamic_cast<Identifier const*>(memberExpr))
+					{
+						ASTString const& name = identifier->name();
+						if (name == "block" || name == "msg" || name == "tx")
+							txVars.insert(name + "." + _memberAccess.memberName());
+					}
+
+				return true;
+			}
+
+			set<string> txVars;
+		} txVarsVisitor;
+
+		if (auto fun = programFunction())
+		{
+			fun->accept(txVarsVisitor);
+			txVars += txVarsVisitor.txVars;
+		}
+
+		// Here we are interested in txData from the summary predicate.
+		auto txValues = readTxVars(_args.at(4));
+		vector<string> values;
+		for (auto const& _var: txVars)
+			if (auto v = txValues.at(_var))
+				values.push_back(_var + ": " + *v);
+
+		if (!values.empty())
+			txModel = "{ " + boost::algorithm::join(values, ", ") + " }";
 	}
 
 	if (auto contract = programContract())
-		return contract->name() + ".constructor()" + value;
+		return contract->name() + ".constructor()" + txModel;
 
 	auto stateVars = stateVariables();
 	solAssert(stateVars.has_value(), "");
@@ -262,7 +319,7 @@ string Predicate::formatSummaryCall(
 		solAssert(fun->annotation().contract, "");
 		prefix = fun->annotation().contract->name() + ".";
 	}
-	return prefix + fName + "(" + boost::algorithm::join(functionArgs, ", ") + ")" + value;
+	return prefix + fName + "(" + boost::algorithm::join(functionArgs, ", ") + ")" + txModel;
 }
 
 vector<optional<string>> Predicate::summaryStateValues(vector<smtutil::Expression> const& _args) const
@@ -369,6 +426,50 @@ pair<vector<optional<string>>, vector<VariableDeclaration const*>> Predicate::lo
 	return {formatExpressions(outValuesInScope, outTypes), localVarsInScope};
 }
 
+map<string, string> Predicate::expressionSubstitution(smtutil::Expression const& _predExpr) const
+{
+	map<string, string> subst;
+	string predName = functor().name;
+
+	solAssert(contextContract(), "");
+	auto const& stateVars = SMTEncoder::stateVariablesIncludingInheritedAndPrivate(*contextContract());
+
+	auto nArgs = _predExpr.arguments.size();
+
+	// The signature of an interface predicate is
+	// interface(this, abiFunctions, cryptoFunctions, blockchainState, stateVariables).
+	// An invariant for an interface predicate is a contract
+	// invariant over its state, for example `x <= 0`.
+	if (isInterface())
+	{
+		solAssert(starts_with(predName, "interface"), "");
+		subst[_predExpr.arguments.at(0).name] = "address(this)";
+		solAssert(nArgs == stateVars.size() + 4, "");
+		for (size_t i = nArgs - stateVars.size(); i < nArgs; ++i)
+			subst[_predExpr.arguments.at(i).name] = stateVars.at(i - 4)->name();
+	}
+	// The signature of a nondet interface predicate is
+	// nondet_interface(error, this, abiFunctions, cryptoFunctions, blockchainState, stateVariables, blockchainState', stateVariables').
+	// An invariant for a nondet interface predicate is a reentrancy property
+	// over the pre and post state variables of a contract, where pre state vars
+	// are represented by the variable's name and post state vars are represented
+	// by the primed variable's name, for example
+	// `(x <= 0) => (x' <= 100)`.
+	else if (isNondetInterface())
+	{
+		solAssert(starts_with(predName, "nondet_interface"), "");
+		subst[_predExpr.arguments.at(0).name] = "<errorCode>";
+		subst[_predExpr.arguments.at(1).name] = "address(this)";
+		solAssert(nArgs == stateVars.size() * 2 + 6, "");
+		for (size_t i = nArgs - stateVars.size(), s = 0; i < nArgs; ++i, ++s)
+			subst[_predExpr.arguments.at(i).name] = stateVars.at(s)->name() + "'";
+		for (size_t i = nArgs - (stateVars.size() * 2 + 1), s = 0; i < nArgs - (stateVars.size() + 1); ++i, ++s)
+			subst[_predExpr.arguments.at(i).name] = stateVars.at(s)->name();
+	}
+
+	return subst;
+}
+
 vector<optional<string>> Predicate::formatExpressions(vector<smtutil::Expression> const& _exprs, vector<Type const*> const& _types) const
 {
 	solAssert(_exprs.size() == _types.size(), "");
@@ -384,7 +485,27 @@ optional<string> Predicate::expressionToString(smtutil::Expression const& _expr,
 	{
 		solAssert(_expr.sort->kind == Kind::Int, "");
 		solAssert(_expr.arguments.empty(), "");
-		// TODO assert that _expr.name is a number.
+
+		if (
+			_type->category() == Type::Category::Address ||
+			_type->category() == Type::Category::FixedBytes
+		)
+		{
+			try
+			{
+				if (_expr.name == "0")
+					return "0x0";
+				// For some reason the code below returns "0x" for "0".
+				return toHex(toCompactBigEndian(bigint(_expr.name)), HexPrefix::Add, HexCase::Lower);
+			}
+			catch (out_of_range const&)
+			{
+			}
+			catch (invalid_argument const&)
+			{
+			}
+		}
+
 		return _expr.name;
 	}
 	if (smt::isBool(*_type))
@@ -526,9 +647,9 @@ map<string, optional<string>> Predicate::readTxVars(smtutil::Expression const& _
 		{"block.number", TypeProvider::uint256()},
 		{"block.timestamp", TypeProvider::uint256()},
 		{"blockhash", TypeProvider::array(DataLocation::Memory, TypeProvider::uint256())},
-		{"msg.data", TypeProvider::bytesMemory()},
+		{"msg.data", TypeProvider::array(DataLocation::CallData)},
 		{"msg.sender", TypeProvider::address()},
-		{"msg.sig", TypeProvider::uint256()},
+		{"msg.sig", TypeProvider::fixedBytes(4)},
 		{"msg.value", TypeProvider::uint256()},
 		{"tx.gasprice", TypeProvider::uint256()},
 		{"tx.origin", TypeProvider::address()}

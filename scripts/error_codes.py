@@ -125,7 +125,7 @@ def find_files(top_dir, sub_dirs, extensions):
 
 def find_ids_in_test_file(file_name):
     source = read_file(file_name)
-    pattern = r"^// (.*Error|Warning) \d\d\d\d:"
+    pattern = r"^// (.*Error|Warning|Info) \d\d\d\d:"
     return {m.group(0)[-5:-1] for m in re.finditer(pattern, source, flags=re.MULTILINE)}
 
 
@@ -261,9 +261,9 @@ def main(argv):
     no_confirm = False
     examine_coverage = False
     next_id = False
-    opts, args = getopt.getopt(argv, "", ["check", "fix", "no-confirm", "examine-coverage", "next"])
+    opts, _args = getopt.getopt(argv, "", ["check", "fix", "no-confirm", "examine-coverage", "next"])
 
-    for opt, arg in opts:
+    for opt, _arg in opts:
         if opt == "--check":
             check = True
         elif opt == "--fix":

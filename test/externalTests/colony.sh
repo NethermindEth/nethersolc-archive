@@ -18,30 +18,52 @@
 #
 # (c) 2019 solidity contributors.
 #------------------------------------------------------------------------------
+
+set -e
+
 source scripts/common.sh
 source test/externalTests/common.sh
 
-verify_input "$1"
-SOLJSON="$1"
+verify_input "$@"
+BINARY_TYPE="$1"
+BINARY_PATH="$2"
 
-function install_fn { yarn; git submodule update --init; }
 function compile_fn { yarn run provision:token:contracts; }
 function test_fn { yarn run test:contracts; }
 
 function colony_test
 {
-    OPTIMIZER_LEVEL=3
-    CONFIG="truffle.js"
+    local repo="https://github.com/solidity-external-tests/colonyNetwork.git"
+    local branch=develop_080
+    local config_file="truffle.js"
+    # On levels 1 and 2 it compiles but tests run out of gas
+    local min_optimizer_level=3
+    local max_optimizer_level=3
 
-    truffle_setup "$SOLJSON" https://github.com/solidity-external-tests/colonyNetwork.git develop_080
-    run_install "$SOLJSON" install_fn
+    local selected_optimizer_levels
+    selected_optimizer_levels=$(circleci_select_steps "$(seq "$min_optimizer_level" "$max_optimizer_level")")
+    print_optimizer_levels_or_exit "$selected_optimizer_levels"
+
+    setup_solc "$DIR" "$BINARY_TYPE" "$BINARY_PATH"
+    download_project "$repo" "$branch" "$DIR"
+    [[ $BINARY_TYPE == native ]] && replace_global_solc "$BINARY_PATH"
+
+    neutralize_package_json_hooks
+    force_truffle_compiler_settings "$config_file" "$BINARY_TYPE" "${DIR}/solc" "$min_optimizer_level"
+    yarn install
+    git submodule update --init
 
     cd lib
     rm -Rf dappsys
     git clone https://github.com/solidity-external-tests/dappsys-monolithic.git -b master_080 dappsys
     cd ..
 
-    truffle_run_test "$SOLJSON" compile_fn test_fn
+    replace_version_pragmas
+    [[ $BINARY_TYPE == solcjs ]] && force_solc_modules "${DIR}/solc"
+
+    for level in $selected_optimizer_levels; do
+        truffle_run_test "$config_file" "$BINARY_TYPE" "${DIR}/solc" "$level" compile_fn test_fn
+    done
 }
 
 external_test ColonyNetworks colony_test

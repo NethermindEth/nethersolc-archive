@@ -108,7 +108,7 @@ private:
 	{
 		auto const& reference = m_references.at(&_identifier);
 		auto const varDecl = dynamic_cast<VariableDeclaration const*>(reference.declaration);
-		solUnimplementedAssert(varDecl, "");
+		solUnimplementedAssert(varDecl);
 		string const& suffix = reference.suffix;
 
 		string value;
@@ -187,6 +187,18 @@ private:
 		{
 			solAssert(suffix == "offset" || suffix == "length", "");
 			value = IRVariable{*varDecl}.part(suffix).name();
+		}
+		else if (
+			auto const* functionType = dynamic_cast<FunctionType const*>(varDecl->type());
+			functionType && functionType->kind() == FunctionType::Kind::External
+		)
+		{
+			solAssert(suffix == "selector" || suffix == "address", "");
+			solAssert(varDecl->type()->sizeOnStack() == 2, "");
+			if (suffix == "selector")
+				value = IRVariable{*varDecl}.part("functionSelector").name();
+			else
+				value = IRVariable{*varDecl}.part("address").name();
 		}
 		else
 			solAssert(false, "");
@@ -737,7 +749,7 @@ bool IRGeneratorForStatements::visit(UnaryOperation const& _unaryOperation)
 			) << "(" << IRVariable(_unaryOperation.subExpression()).name() << ")\n";
 		}
 		else
-			solUnimplementedAssert(false, "Unary operator not yet implemented");
+			solUnimplemented("Unary operator not yet implemented");
 	}
 	else if (resultType.category() == Type::Category::FixedBytes)
 	{
@@ -755,7 +767,7 @@ bool IRGeneratorForStatements::visit(UnaryOperation const& _unaryOperation)
 		appendSimpleUnaryOperation(_unaryOperation, _unaryOperation.subExpression());
 	}
 	else
-		solUnimplementedAssert(false, "Unary operator not yet implemented");
+		solUnimplemented("Unary operator not yet implemented");
 
 	return false;
 }
@@ -1092,29 +1104,57 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 	case FunctionType::Kind::ABIEncode:
 	case FunctionType::Kind::ABIEncodePacked:
 	case FunctionType::Kind::ABIEncodeWithSelector:
+	case FunctionType::Kind::ABIEncodeCall:
 	case FunctionType::Kind::ABIEncodeWithSignature:
 	{
 		bool const isPacked = functionType->kind() == FunctionType::Kind::ABIEncodePacked;
 		solAssert(functionType->padArguments() != isPacked, "");
 		bool const hasSelectorOrSignature =
 			functionType->kind() == FunctionType::Kind::ABIEncodeWithSelector ||
+			functionType->kind() == FunctionType::Kind::ABIEncodeCall ||
 			functionType->kind() == FunctionType::Kind::ABIEncodeWithSignature;
 
 		TypePointers argumentTypes;
 		TypePointers targetTypes;
 		vector<string> argumentVars;
-		for (size_t i = 0; i < arguments.size(); ++i)
+		string selector;
+		vector<ASTPointer<Expression const>> argumentsOfEncodeFunction;
+
+		if (functionType->kind() == FunctionType::Kind::ABIEncodeCall)
 		{
-			// ignore selector
-			if (hasSelectorOrSignature && i == 0)
-				continue;
-			argumentTypes.emplace_back(&type(*arguments[i]));
-			targetTypes.emplace_back(type(*arguments[i]).fullEncodingType(false, true, isPacked));
-			argumentVars += IRVariable(*arguments[i]).stackSlots();
+			solAssert(arguments.size() == 2, "");
+			// Account for tuples with one component which become that component
+			if (type(*arguments[1]).category() == Type::Category::Tuple)
+			{
+				auto const& tupleExpression = dynamic_cast<TupleExpression const&>(*arguments[1]);
+				for (auto component: tupleExpression.components())
+					argumentsOfEncodeFunction.push_back(component);
+			}
+			else
+				argumentsOfEncodeFunction.push_back(arguments[1]);
+		}
+		else
+			for (size_t i = 0; i < arguments.size(); ++i)
+			{
+				// ignore selector
+				if (hasSelectorOrSignature && i == 0)
+					continue;
+				argumentsOfEncodeFunction.push_back(arguments[i]);
+			}
+
+		for (auto const& argument: argumentsOfEncodeFunction)
+		{
+			argumentTypes.emplace_back(&type(*argument));
+			targetTypes.emplace_back(type(*argument).fullEncodingType(false, true, isPacked));
+			argumentVars += IRVariable(*argument).stackSlots();
 		}
 
-		string selector;
-		if (functionType->kind() == FunctionType::Kind::ABIEncodeWithSignature)
+		if (functionType->kind() == FunctionType::Kind::ABIEncodeCall)
+			selector = convert(
+				IRVariable(*arguments[0]).part("functionSelector"),
+				*TypeProvider::fixedBytes(4)
+			).name();
+		else if (functionType->kind() == FunctionType::Kind::ABIEncodeWithSignature)
 		{
 			// hash the signature
 			Type const& selectorType = type(*arguments.front());
@@ -1546,7 +1586,7 @@ void IRGeneratorForStatements::endVisit(FunctionCallOptions const& _options)
 	setLocation(_options);
 	FunctionType const& previousType = dynamic_cast<FunctionType const&>(*_options.expression().annotation().type);
 
-	solUnimplementedAssert(!previousType.bound(), "");
+	solUnimplementedAssert(!previousType.bound());
 
 	// Copy over existing values.
 	for (auto const& item: previousType.stackItems())
@@ -1716,7 +1756,7 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 		{
 			solUnimplementedAssert(
 				dynamic_cast<FunctionType const&>(*_memberAccess.expression().annotation().type).kind() ==
-				FunctionType::Kind::External, ""
+				FunctionType::Kind::External
 			);
 			define(IRVariable{_memberAccess}, IRVariable(_memberAccess.expression()).part("address"));
 		}
@@ -1821,7 +1861,7 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 
 			define(_memberAccess) << requestedValue << "\n";
 		}
-		else if (set<string>{"encode", "encodePacked", "encodeWithSelector", "encodeWithSignature", "decode"}.count(member))
+		else if (set<string>{"encode", "encodePacked", "encodeWithSelector", "encodeCall", "encodeWithSignature", "decode"}.count(member))
 		{
 			// no-op
 		}
@@ -2264,7 +2304,7 @@ void IRGeneratorForStatements::endVisit(IndexRangeAccess const& _indexRangeAcces
 			break;
 		}
 		default:
-			solUnimplementedAssert(false, "Index range accesses is implemented only on calldata arrays.");
+			solUnimplemented("Index range accesses is implemented only on calldata arrays.");
 	}
 }
 
@@ -2462,6 +2502,15 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 			<?+retVars> <retVars> := </+retVars> <abiDecode>(<pos>, add(<pos>, <returnSize>))
 		}
 	)");
+	// We do not need to check extcodesize if we expect return data: If there is no
+	// code, the call will return empty data and the ABI decoder will revert.
+	size_t encodedHeadSize = 0;
+	for (auto const& t: returnInfo.returnTypes)
+		encodedHeadSize += t->decodingType()->calldataHeadSize();
+	bool const checkExtcodesize =
+		encodedHeadSize == 0 ||
+		!m_context.evmVersion().supportsReturndata() ||
+		m_context.revertStrings() >= RevertStrings::Debug;
 	templ("pos", m_context.newYulVariable());
 	templ("end", m_context.newYulVariable());
 	if (_functionCall.annotation().tryCall)
@@ -2517,6 +2566,8 @@ void IRGeneratorForStatements::appendExternalFunctionCall(
 		u256 gasNeededByCaller = evmasm::GasCosts::callGas(m_context.evmVersion()) + 10;
 		if (funType.valueSet())
 			gasNeededByCaller += evmasm::GasCosts::callValueTransferGas;
+		if (!checkExtcodesize)
+			gasNeededByCaller += evmasm::GasCosts::callNewAccountGas; // we never know
 		templ("gas", "sub(gas(), " + formatNumber(gasNeededByCaller) + ")");
 	}
 	// Order is important here, STATICCALL might overlap with DELEGATECALL.
@@ -2907,8 +2958,8 @@ void IRGeneratorForStatements::writeToLValue(IRLValue const& _lvalue, IRVariable
 			[&](IRLValue::Stack const& _stack) { assign(_stack.variable, _value); },
 			[&](IRLValue::Immutable const& _immutable)
 			{
-				solUnimplementedAssert(_lvalue.type.isValueType(), "");
-				solUnimplementedAssert(_lvalue.type.sizeOnStack() == 1, "");
+				solUnimplementedAssert(_lvalue.type.isValueType());
+				solUnimplementedAssert(_lvalue.type.sizeOnStack() == 1);
 				solAssert(_lvalue.type == *_immutable.variable->type(), "");
 				size_t memOffset = m_context.immutableMemoryOffset(*_immutable.variable);
 
@@ -2967,8 +3018,8 @@ IRVariable IRGeneratorForStatements::readFromLValue(IRLValue const& _lvalue)
 			define(result, _stack.variable);
 		},
 		[&](IRLValue::Immutable const& _immutable) {
-			solUnimplementedAssert(_lvalue.type.isValueType(), "");
-			solUnimplementedAssert(_lvalue.type.sizeOnStack() == 1, "");
+			solUnimplementedAssert(_lvalue.type.isValueType());
+			solUnimplementedAssert(_lvalue.type.sizeOnStack() == 1);
 			solAssert(_lvalue.type == *_immutable.variable->type(), "");
 			if (m_context.executionContext() == IRGenerationContext::ExecutionContext::Creation)
 			{

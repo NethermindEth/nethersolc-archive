@@ -32,6 +32,8 @@
 
 #include <liblangutil/CharStreamProvider.h>
 
+#include <libsolutil/Algorithms.h>
+
 #include <range/v3/view.hpp>
 
 #include <limits>
@@ -635,6 +637,7 @@ void SMTEncoder::endVisit(FunctionCall const& _funCall)
 	case FunctionType::Kind::ABIEncode:
 	case FunctionType::Kind::ABIEncodePacked:
 	case FunctionType::Kind::ABIEncodeWithSelector:
+	case FunctionType::Kind::ABIEncodeCall:
 	case FunctionType::Kind::ABIEncodeWithSignature:
 		visitABIFunction(_funCall);
 		break;
@@ -1316,32 +1319,42 @@ bool SMTEncoder::visit(MemberAccess const& _memberAccess)
 			solAssert(name == "block" || name == "msg" || name == "tx", "");
 			defineExpr(_memberAccess, state().txMember(name + "." + _memberAccess.memberName()));
 		}
-		else if (auto magicType = dynamic_cast<MagicType const*>(exprType); magicType->kind() == MagicType::Kind::MetaType)
+		else if (auto magicType = dynamic_cast<MagicType const*>(exprType))
 		{
-			auto const& memberName = _memberAccess.memberName();
-			if (memberName == "min" || memberName == "max")
+			if (magicType->kind() == MagicType::Kind::Block)
+				defineExpr(_memberAccess, state().txMember("block." + _memberAccess.memberName()));
+			else if (magicType->kind() == MagicType::Kind::Message)
+				defineExpr(_memberAccess, state().txMember("msg." + _memberAccess.memberName()));
+			else if (magicType->kind() == MagicType::Kind::Transaction)
+				defineExpr(_memberAccess, state().txMember("tx." + _memberAccess.memberName()));
+			else if (magicType->kind() == MagicType::Kind::MetaType)
 			{
-				if (IntegerType const* integerType = dynamic_cast<IntegerType const*>(magicType->typeArgument()))
-					defineExpr(_memberAccess, memberName == "min" ? integerType->minValue() : integerType->maxValue());
-				else if (EnumType const* enumType = dynamic_cast<EnumType const*>(magicType->typeArgument()))
-					defineExpr(_memberAccess, memberName == "min" ? enumType->minValue() : enumType->maxValue());
+				auto const& memberName = _memberAccess.memberName();
+				if (memberName == "min" || memberName == "max")
+				{
+					if (IntegerType const* integerType = dynamic_cast<IntegerType const*>(magicType->typeArgument()))
+						defineExpr(_memberAccess, memberName == "min" ? integerType->minValue() : integerType->maxValue());
+					else if (EnumType const* enumType = dynamic_cast<EnumType const*>(magicType->typeArgument()))
+						defineExpr(_memberAccess, memberName == "min" ? enumType->minValue() : enumType->maxValue());
+				}
+				else if (memberName == "interfaceId")
+				{
+					ContractDefinition const& contract = dynamic_cast<ContractType const&>(*magicType->typeArgument()).contractDefinition();
+					defineExpr(_memberAccess, contract.interfaceId());
+				}
+				else
+					// NOTE: supporting name, creationCode, runtimeCode would be easy enough, but the bytes/string they return are not
+					//       at all usable in the SMT checker currently
+					m_errorReporter.warning(
+						7507_error,
+						_memberAccess.location(),
+						"Assertion checker does not yet support this expression."
+					);
+
 			}
-			else if (memberName == "interfaceId")
-			{
-				ContractDefinition const& contract = dynamic_cast<ContractType const&>(*magicType->typeArgument()).contractDefinition();
-				defineExpr(_memberAccess, contract.interfaceId());
-			}
-			else
-				// NOTE: supporting name, creationCode, runtimeCode would be easy enough, but the bytes/string they return are not
-				//       at all usable in the SMT checker currently
-				m_errorReporter.warning(
-					7507_error,
-					_memberAccess.location(),
-					"Assertion checker does not yet support this expression."
-				);
 		}
 		else
-			solUnimplementedAssert(false, "");
+			solAssert(false, "");
 
 		return false;
 	}
@@ -1419,12 +1432,12 @@ bool SMTEncoder::visit(MemberAccess const& _memberAccess)
 			return false;
 		}
 	}
-	else
-		m_errorReporter.warning(
-			7650_error,
-			_memberAccess.location(),
-			"Assertion checker does not yet support this expression."
-		);
+
+	m_errorReporter.warning(
+		7650_error,
+		_memberAccess.location(),
+		"Assertion checker does not yet support this expression."
+	);
 
 	return true;
 }
@@ -2361,28 +2374,25 @@ void SMTEncoder::resetReferences(Type const* _type)
 
 bool SMTEncoder::sameTypeOrSubtype(Type const* _a, Type const* _b)
 {
-	Type const* prefix = _a;
-	while (
-		prefix->category() == Type::Category::Mapping ||
-		prefix->category() == Type::Category::Array
-	)
-	{
-		if (*typeWithoutPointer(_b) == *typeWithoutPointer(prefix))
-			return true;
-		if (prefix->category() == Type::Category::Mapping)
+	bool foundSame = false;
+
+	solidity::util::BreadthFirstSearch<Type const*> bfs{{_a}};
+	bfs.run([&](auto _type, auto&& _addChild) {
+		if (*typeWithoutPointer(_b) == *typeWithoutPointer(_type))
 		{
-			auto mapPrefix = dynamic_cast<MappingType const*>(prefix);
-			solAssert(mapPrefix, "");
-			prefix = mapPrefix->valueType();
+			foundSame = true;
+			bfs.abort();
 		}
-		else
-		{
-			auto arrayPrefix = dynamic_cast<ArrayType const*>(prefix);
-			solAssert(arrayPrefix, "");
-			prefix = arrayPrefix->baseType();
-		}
-	}
-	return false;
+		if (auto const* mapType = dynamic_cast<MappingType const*>(_type))
+			_addChild(mapType->valueType());
+		else if (auto const* arrayType = dynamic_cast<ArrayType const*>(_type))
+			_addChild(arrayType->baseType());
+		else if (auto const* structType = dynamic_cast<StructType const*>(_type))
+			for (auto const& member: structType->nativeMembers(nullptr))
+				_addChild(member.type);
+	});
+
+	return foundSame;
 }
 
 bool SMTEncoder::isSupportedType(Type const& _type) const
@@ -3032,6 +3042,7 @@ set<FunctionCall const*> SMTEncoder::collectABICalls(ASTNode const* _node)
 				case FunctionType::Kind::ABIEncode:
 				case FunctionType::Kind::ABIEncodePacked:
 				case FunctionType::Kind::ABIEncodeWithSelector:
+				case FunctionType::Kind::ABIEncodeCall:
 				case FunctionType::Kind::ABIEncodeWithSignature:
 				case FunctionType::Kind::ABIDecode:
 					abiCalls.insert(&_funCall);

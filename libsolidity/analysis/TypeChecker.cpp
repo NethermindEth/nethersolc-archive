@@ -387,7 +387,7 @@ bool TypeChecker::visit(FunctionDefinition const& _function)
 			_var.referenceLocation() == VariableDeclaration::Location::Storage &&
 			!m_currentContract->abstract()
 		)
-			m_errorReporter.typeError(
+			m_errorReporter.fatalTypeError(
 				3644_error,
 				_var.location(),
 				"This parameter has a type that can only be used internally. "
@@ -403,7 +403,7 @@ bool TypeChecker::visit(FunctionDefinition const& _function)
 				solAssert(!message.empty(), "Expected detailed error message!");
 				if (_function.isConstructor())
 					message += " You can make the contract abstract to avoid this problem.";
-				m_errorReporter.typeError(4103_error, _var.location(), message);
+				m_errorReporter.fatalTypeError(4103_error, _var.location(), message);
 			}
 			else if (
 				!useABICoderV2() &&
@@ -530,6 +530,15 @@ bool TypeChecker::visit(VariableDeclaration const& _variable)
 	}
 	if (_variable.isConstant())
 	{
+		if (!varType->isValueType())
+		{
+			bool allowed = false;
+			if (auto arrayType = dynamic_cast<ArrayType const*>(varType))
+				allowed = arrayType->isByteArray();
+			if (!allowed)
+				m_errorReporter.fatalTypeError(9259_error, _variable.location(), "Constants of non-value type not yet implemented.");
+		}
+
 		if (!_variable.value())
 			m_errorReporter.typeError(4266_error, _variable.location(), "Uninitialized \"constant\" variable.");
 		else if (!*_variable.value()->annotation().isPure)
@@ -619,6 +628,16 @@ bool TypeChecker::visit(VariableDeclaration const& _variable)
 	}
 
 	return false;
+}
+
+void TypeChecker::endVisit(StructDefinition const& _struct)
+{
+	for (auto const& member: _struct.members())
+		solAssert(
+			member->annotation().type &&
+			member->annotation().type->canBeStored(),
+			"Type cannot be used in struct."
+		);
 }
 
 void TypeChecker::visitManually(
@@ -828,7 +847,7 @@ bool TypeChecker::visit(InlineAssembly const& _inlineAssembly)
 			if (!identifierInfo.suffix.empty())
 			{
 				string const& suffix = identifierInfo.suffix;
-				solAssert((set<string>{"offset", "slot", "length"}).count(suffix), "");
+				solAssert((set<string>{"offset", "slot", "length", "selector", "address"}).count(suffix), "");
 				if (!var->isConstant() && (var->isStateVariable() || var->type()->dataStoredIn(DataLocation::Storage)))
 				{
 					if (suffix != "slot" && suffix != "offset")
@@ -858,6 +877,19 @@ bool TypeChecker::visit(InlineAssembly const& _inlineAssembly)
 					if (suffix != "offset" && suffix != "length")
 					{
 						m_errorReporter.typeError(1536_error, nativeLocationOf(_identifier), "Calldata variables only support \".offset\" and \".length\".");
+						return false;
+					}
+				}
+				else if (auto const* fpType = dynamic_cast<FunctionTypePointer>(var->type()))
+				{
+					if (suffix != "selector" && suffix != "address")
+					{
+						m_errorReporter.typeError(9272_error, nativeLocationOf(_identifier), "Variables of type function pointer only support \".selector\" and \".address\".");
+						return false;
+					}
+					if (fpType->kind() != FunctionType::Kind::External)
+					{
+						m_errorReporter.typeError(8533_error, nativeLocationOf(_identifier), "Only Variables of type external function pointer support \".selector\" and \".address\".");
 						return false;
 					}
 				}
@@ -1207,6 +1239,14 @@ void TypeChecker::endVisit(RevertStatement const& _revert)
 		m_errorReporter.typeError(1885_error, errorCall.expression().location(), "Expression has to be an error.");
 }
 
+void TypeChecker::endVisit(ArrayTypeName const& _typeName)
+{
+	solAssert(
+		_typeName.baseType().annotation().type &&
+		_typeName.baseType().annotation().type->storageBytes() != 0,
+		"Illegal base type of storage size zero for array."
+	);
+}
 
 bool TypeChecker::visit(VariableDeclarationStatement const& _statement)
 {
@@ -1956,6 +1996,7 @@ void TypeChecker::typeCheckABIEncodeFunctions(
 		_functionType->kind() == FunctionType::Kind::ABIEncode ||
 		_functionType->kind() == FunctionType::Kind::ABIEncodePacked ||
 		_functionType->kind() == FunctionType::Kind::ABIEncodeWithSelector ||
+		_functionType->kind() == FunctionType::Kind::ABIEncodeCall ||
 		_functionType->kind() == FunctionType::Kind::ABIEncodeWithSignature,
 		"ABI function has unexpected FunctionType::Kind."
 	);
@@ -1979,6 +2020,13 @@ void TypeChecker::typeCheckABIEncodeFunctions(
 
 	// Perform standard function call type checking
 	typeCheckFunctionGeneralChecks(_functionCall, _functionType);
+
+	// No further generic checks needed as we do a precise check for ABIEncodeCall
+	if (_functionType->kind() == FunctionType::Kind::ABIEncodeCall)
+	{
+		typeCheckABIEncodeCallFunction(_functionCall);
+		return;
+	}
 
 	// Check additional arguments for variadic functions
 	vector<ASTPointer<Expression const>> const& arguments = _functionCall.arguments();
@@ -2034,6 +2082,110 @@ void TypeChecker::typeCheckABIEncodeFunctions(
 				2056_error,
 				arguments[i]->location(),
 				"This type cannot be encoded."
+			);
+	}
+}
+
+void TypeChecker::typeCheckABIEncodeCallFunction(FunctionCall const& _functionCall)
+{
+	vector<ASTPointer<Expression const>> const& arguments = _functionCall.arguments();
+
+	// Expecting first argument to be the function pointer and second to be a tuple.
+	if (arguments.size() != 2)
+	{
+		m_errorReporter.typeError(
+			6219_error,
+			_functionCall.location(),
+			"Expected two arguments: a function pointer followed by a tuple."
+		);
+		return;
+	}
+
+	auto const functionPointerType = dynamic_cast<FunctionTypePointer>(type(*arguments.front()));
+
+	if (!functionPointerType)
+	{
+		m_errorReporter.typeError(
+			5511_error,
+			arguments.front()->location(),
+			"Expected first argument to be a function pointer, not \"" +
+			type(*arguments.front())->canonicalName() +
+			"\"."
+		);
+		return;
+	}
+
+	if (functionPointerType->kind() != FunctionType::Kind::External)
+	{
+		string msg = "Function must be \"public\" or \"external\".";
+		SecondarySourceLocation ssl{};
+
+		if (functionPointerType->hasDeclaration())
+		{
+			ssl.append("Function is declared here:", functionPointerType->declaration().location());
+			if (functionPointerType->declaration().scope() == m_currentContract)
+				msg += " Did you forget to prefix \"this.\"?";
+		}
+
+		m_errorReporter.typeError(3509_error, arguments[0]->location(), ssl, msg);
+		return;
+	}
+
+	solAssert(!functionPointerType->takesArbitraryParameters(), "Function must have fixed parameters.");
+
+	// Tuples with only one component become that component
+	vector<ASTPointer<Expression const>> callArguments;
+
+	auto const* tupleType = dynamic_cast<TupleType const*>(type(*arguments[1]));
+	if (tupleType)
+	{
+		auto const& argumentTuple = dynamic_cast<TupleExpression const&>(*arguments[1].get());
+		callArguments = decltype(callArguments){argumentTuple.components().begin(), argumentTuple.components().end()};
+	}
+	else
+		callArguments.push_back(arguments[1]);
+
+	if (functionPointerType->parameterTypes().size() != callArguments.size())
+	{
+		if (tupleType)
+			m_errorReporter.typeError(
+				7788_error,
+				_functionCall.location(),
+				"Expected " +
+				to_string(functionPointerType->parameterTypes().size()) +
+				" instead of " +
+				to_string(callArguments.size()) +
+				" components for the tuple parameter."
+			);
+		else
+			m_errorReporter.typeError(
+				7515_error,
+				_functionCall.location(),
+				"Expected a tuple with " +
+				to_string(functionPointerType->parameterTypes().size()) +
+				" components instead of a single non-tuple parameter."
+			);
+	}
+
+	// Use min() to check as much as we can before failing fatally
+	size_t const numParameters = min(callArguments.size(), functionPointerType->parameterTypes().size());
+
+	for (size_t i = 0; i < numParameters; i++)
+	{
+		Type const& argType = *type(*callArguments[i]);
+		BoolResult result = argType.isImplicitlyConvertibleTo(*functionPointerType->parameterTypes()[i]);
+		if (!result)
+			m_errorReporter.typeError(
+				5407_error,
+				callArguments[i]->location(),
+				"Cannot implicitly convert component at position " +
+				to_string(i) +
+				" from \"" +
+				argType.canonicalName() +
+				"\" to \"" +
+				functionPointerType->parameterTypes()[i]->canonicalName() +
+				"\"" +
+				(result.message().empty() ?  "." : ": " + result.message())
 			);
 	}
 }
@@ -2467,6 +2619,7 @@ bool TypeChecker::visit(FunctionCall const& _functionCall)
 		case FunctionType::Kind::ABIEncodePacked:
 		case FunctionType::Kind::ABIEncodeWithSelector:
 		case FunctionType::Kind::ABIEncodeWithSignature:
+		case FunctionType::Kind::ABIEncodeCall:
 		{
 			typeCheckABIEncodeFunctions(_functionCall, functionType);
 			returnTypes = functionType->returnParameterTypes();

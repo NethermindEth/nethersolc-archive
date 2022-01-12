@@ -19,6 +19,7 @@
 /// Unit tests for solc/CommandLineInterface.h
 
 #include <solc/CommandLineInterface.h>
+#include <solc/Exceptions.h>
 
 #include <test/solc/Common.h>
 
@@ -28,6 +29,8 @@
 #include <test/TemporaryDirectory.h>
 
 #include <libsolutil/JSON.h>
+
+#include <boost/algorithm/string.hpp>
 
 #include <range/v3/view/transform.hpp>
 
@@ -110,9 +113,42 @@ namespace solidity::frontend::test
 
 BOOST_AUTO_TEST_SUITE(CommandLineInterfaceTest)
 
+BOOST_AUTO_TEST_CASE(help)
+{
+	OptionsReaderAndMessages result = runCLI({"solc", "--help"}, "");
+
+	BOOST_TEST(result.success);
+	BOOST_TEST(boost::starts_with(result.stdoutContent, "solc, the Solidity commandline compiler."));
+	BOOST_TEST(result.stderrContent == "");
+	BOOST_TEST(result.options.input.mode == InputMode::Help);
+}
+
+BOOST_AUTO_TEST_CASE(license)
+{
+	OptionsReaderAndMessages result = runCLI({"solc", "--license"}, "");
+
+	BOOST_TEST(result.success);
+	BOOST_TEST(boost::starts_with(result.stdoutContent, "Most of the code is licensed under GPLv3"));
+	BOOST_TEST(result.stderrContent == "");
+	BOOST_TEST(result.options.input.mode == InputMode::License);
+}
+
+BOOST_AUTO_TEST_CASE(version)
+{
+	OptionsReaderAndMessages result = runCLI({"solc", "--version"}, "");
+
+	BOOST_TEST(result.success);
+	BOOST_TEST(boost::ends_with(result.stdoutContent, "Version: " + solidity::frontend::VersionString + "\n"));
+	BOOST_TEST(result.stderrContent == "");
+	BOOST_TEST(result.options.input.mode == InputMode::Version);
+}
+
 BOOST_AUTO_TEST_CASE(multiple_input_modes)
 {
-	array<string, 6> inputModeOptions = {
+	array<string, 9> inputModeOptions = {
+		"--help",
+		"--license",
+		"--version",
 		"--standard-json",
 		"--link",
 		"--assemble",
@@ -122,18 +158,17 @@ BOOST_AUTO_TEST_CASE(multiple_input_modes)
 	};
 	string expectedMessage =
 		"The following options are mutually exclusive: "
-		"--standard-json, --link, --assemble, --strict-assembly, --yul, --import-ast. "
-		"Select at most one.\n";
+		"--help, --license, --version, --standard-json, --link, --assemble, --strict-assembly, --yul, --import-ast, --lsp. "
+		"Select at most one.";
 
 	for (string const& mode1: inputModeOptions)
 		for (string const& mode2: inputModeOptions)
 			if (mode1 != mode2)
-			{
-				vector<string> commandLine = {"solc", mode1, mode2};
-				OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(commandLine);
-				BOOST_TEST(!result.success);
-				BOOST_TEST(result.stderrContent == expectedMessage);
-			}
+				BOOST_CHECK_EXCEPTION(
+					parseCommandLineAndReadInputFiles({"solc", mode1, mode2}),
+					CommandLineValidationError,
+					[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+				);
 }
 
 BOOST_AUTO_TEST_CASE(cli_input)
@@ -153,7 +188,7 @@ BOOST_AUTO_TEST_CASE(cli_input)
 		{"a", "b", "c/d/e/"},
 	};
 	map<string, string> expectedSources = {
-		{"<stdin>", "\n"},
+		{"<stdin>", ""},
 		{(expectedDir1 / "input1.sol").generic_string(), ""},
 		{(expectedDir2 / "input2.sol").generic_string(), ""},
 	};
@@ -178,7 +213,7 @@ BOOST_AUTO_TEST_CASE(cli_input)
 	BOOST_TEST(result.options.input.mode == InputMode::Compiler);
 	BOOST_TEST(result.options.input.addStdin);
 	BOOST_CHECK_EQUAL(result.options.input.remappings, expectedRemappings);
-	BOOST_CHECK_EQUAL(result.reader.sourceCodes(), expectedSources);
+	BOOST_CHECK_EQUAL(result.reader.sourceUnits(), expectedSources);
 	BOOST_CHECK_EQUAL(result.reader.allowedDirectories(), expectedAllowedPaths);
 }
 
@@ -205,7 +240,7 @@ BOOST_AUTO_TEST_CASE(cli_ignore_missing_some_files_exist)
 	BOOST_TEST(result.stderrContent == "\"" + (tempDir2.path() / "input2.sol").string() + "\" is not found. Skipping.\n");
 	BOOST_TEST(result.options.input.mode == InputMode::Compiler);
 	BOOST_TEST(!result.options.input.addStdin);
-	BOOST_CHECK_EQUAL(result.reader.sourceCodes(), expectedSources);
+	BOOST_CHECK_EQUAL(result.reader.sourceUnits(), expectedSources);
 	BOOST_CHECK_EQUAL(result.reader.allowedDirectories(), expectedAllowedPaths);
 }
 
@@ -218,7 +253,7 @@ BOOST_AUTO_TEST_CASE(cli_ignore_missing_no_files_exist)
 		"\"" + (tempDir.path() / "input2.sol").string() + "\" is not found. Skipping.\n"
 		"All specified input files either do not exist or are not regular files.\n";
 
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles({
+	OptionsReaderAndMessages result = runCLI({
 		"solc",
 		(tempDir.path() / "input1.sol").string(),
 		(tempDir.path() / "input2.sol").string(),
@@ -232,11 +267,13 @@ BOOST_AUTO_TEST_CASE(cli_not_a_file)
 {
 	TemporaryDirectory tempDir(TEST_CASE_NAME);
 
-	string expectedMessage = "\"" + tempDir.path().string() + "\" is not a valid file.\n";
+	string expectedMessage = "\"" + tempDir.path().string() + "\" is not a valid file.";
 
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles({"solc", tempDir.path().string()});
-	BOOST_TEST(!result.success);
-	BOOST_TEST(result.stderrContent == expectedMessage);
+	BOOST_CHECK_EXCEPTION(
+		parseCommandLineAndReadInputFiles({"solc", tempDir.path().string()}),
+		CommandLineValidationError,
+		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+	);
 }
 
 BOOST_AUTO_TEST_CASE(standard_json_base_path)
@@ -254,7 +291,7 @@ BOOST_AUTO_TEST_CASE(standard_json_base_path)
 	BOOST_TEST(result.options.input.mode == InputMode::StandardJson);
 	BOOST_TEST(result.options.input.addStdin);
 	BOOST_TEST(result.options.input.paths.empty());
-	BOOST_TEST(result.reader.sourceCodes().empty());
+	BOOST_TEST(result.reader.sourceUnits().empty());
 	BOOST_TEST(result.reader.allowedDirectories().empty());
 	BOOST_TEST(result.reader.basePath() == "/" / tempDir.path().relative_path());
 }
@@ -267,7 +304,7 @@ BOOST_AUTO_TEST_CASE(standard_json_no_input_file)
 	BOOST_TEST(result.options.input.mode == InputMode::StandardJson);
 	BOOST_TEST(result.options.input.addStdin);
 	BOOST_TEST(result.options.input.paths.empty());
-	BOOST_TEST(result.reader.sourceCodes().empty());
+	BOOST_TEST(result.reader.sourceUnits().empty());
 	BOOST_TEST(result.reader.allowedDirectories().empty());
 }
 
@@ -278,7 +315,7 @@ BOOST_AUTO_TEST_CASE(standard_json_dash)
 	BOOST_TEST(result.stderrContent == "");
 	BOOST_TEST(result.options.input.mode == InputMode::StandardJson);
 	BOOST_TEST(result.options.input.addStdin);
-	BOOST_TEST(result.reader.sourceCodes().empty());
+	BOOST_TEST(result.reader.sourceUnits().empty());
 	BOOST_TEST(result.reader.allowedDirectories().empty());
 }
 
@@ -301,24 +338,26 @@ BOOST_AUTO_TEST_CASE(standard_json_two_input_files)
 {
 	string expectedMessage =
 		"Too many input files for --standard-json.\n"
-		"Please either specify a single file name or provide its content on standard input.\n";
+		"Please either specify a single file name or provide its content on standard input.";
 
-	vector<string> commandLine = {"solc", "--standard-json", "input1.json", "input2.json"};
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(commandLine);
-	BOOST_TEST(!result.success);
-	BOOST_TEST(result.stderrContent == expectedMessage);
+	BOOST_CHECK_EXCEPTION(
+		parseCommandLineAndReadInputFiles({"solc", "--standard-json", "input1.json", "input2.json"}),
+		CommandLineValidationError,
+		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+	);
 }
 
 BOOST_AUTO_TEST_CASE(standard_json_one_input_file_and_stdin)
 {
 	string expectedMessage =
 		"Too many input files for --standard-json.\n"
-		"Please either specify a single file name or provide its content on standard input.\n";
+		"Please either specify a single file name or provide its content on standard input.";
 
-	vector<string> commandLine = {"solc", "--standard-json", "input1.json", "-"};
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(commandLine);
-	BOOST_TEST(!result.success);
-	BOOST_TEST(result.stderrContent == expectedMessage);
+	BOOST_CHECK_EXCEPTION(
+		parseCommandLineAndReadInputFiles({"solc", "--standard-json", "input1.json", "-"}),
+		CommandLineValidationError,
+		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+	);
 }
 
 BOOST_AUTO_TEST_CASE(standard_json_ignore_missing)
@@ -327,29 +366,31 @@ BOOST_AUTO_TEST_CASE(standard_json_ignore_missing)
 
 	// This option is pretty much useless Standard JSON mode.
 	string expectedMessage =
-		"\"" + (tempDir.path() / "input.json").string() + "\" is not found. Skipping.\n"
-		"All specified input files either do not exist or are not regular files.\n";
+		"All specified input files either do not exist or are not regular files.";
 
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles({
-		"solc",
-		"--standard-json",
-		(tempDir.path() / "input.json").string(),
-		"--ignore-missing",
-	});
-	BOOST_TEST(!result.success);
-	BOOST_TEST(result.stderrContent == expectedMessage);
+	BOOST_CHECK_EXCEPTION(
+		parseCommandLineAndReadInputFiles({
+			"solc",
+			"--standard-json",
+			(tempDir.path() / "input.json").string(),
+			"--ignore-missing",
+		}),
+		CommandLineValidationError,
+		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+	);
 }
 
 BOOST_AUTO_TEST_CASE(standard_json_remapping)
 {
 	string expectedMessage =
 		"Import remappings are not accepted on the command line in Standard JSON mode.\n"
-		"Please put them under 'settings.remappings' in the JSON input.\n";
+		"Please put them under 'settings.remappings' in the JSON input.";
 
-	vector<string> commandLine = {"solc", "--standard-json", "a=b"};
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(commandLine);
-	BOOST_TEST(!result.success);
-	BOOST_TEST(result.stderrContent == expectedMessage);
+	BOOST_CHECK_EXCEPTION(
+		parseCommandLineAndReadInputFiles({"solc", "--standard-json", "a=b"}),
+		CommandLineValidationError,
+		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+	);
 }
 
 BOOST_AUTO_TEST_CASE(cli_paths_to_source_unit_names_no_base_path)
@@ -405,7 +446,7 @@ BOOST_AUTO_TEST_CASE(cli_paths_to_source_unit_names_no_base_path)
 	BOOST_TEST(result.stdoutContent == "");
 	BOOST_REQUIRE(result.success);
 	BOOST_TEST(result.options == expectedOptions);
-	BOOST_TEST(result.reader.sourceCodes() == expectedSources);
+	BOOST_TEST(result.reader.sourceUnits() == expectedSources);
 	BOOST_TEST(result.reader.allowedDirectories() == expectedAllowedDirectories);
 	BOOST_TEST(result.reader.basePath() == "");
 }
@@ -467,7 +508,7 @@ BOOST_AUTO_TEST_CASE(cli_paths_to_source_unit_names_base_path_same_as_work_dir)
 	BOOST_TEST(result.stdoutContent == "");
 	BOOST_REQUIRE(result.success);
 	BOOST_TEST(result.options == expectedOptions);
-	BOOST_TEST(result.reader.sourceCodes() == expectedSources);
+	BOOST_TEST(result.reader.sourceUnits() == expectedSources);
 	BOOST_TEST(result.reader.allowedDirectories() == expectedAllowedDirectories);
 	BOOST_TEST(result.reader.basePath() == expectedWorkDir);
 }
@@ -540,7 +581,7 @@ BOOST_AUTO_TEST_CASE(cli_paths_to_source_unit_names_base_path_different_from_wor
 	BOOST_TEST(result.stdoutContent == "");
 	BOOST_REQUIRE(result.success);
 	BOOST_TEST(result.options == expectedOptions);
-	BOOST_TEST(result.reader.sourceCodes() == expectedSources);
+	BOOST_TEST(result.reader.sourceUnits() == expectedSources);
 	BOOST_TEST(result.reader.allowedDirectories() == expectedAllowedDirectories);
 	BOOST_TEST(result.reader.basePath() == expectedBaseDir);
 }
@@ -609,7 +650,7 @@ BOOST_AUTO_TEST_CASE(cli_paths_to_source_unit_names_relative_base_path)
 	BOOST_TEST(result.stdoutContent == "");
 	BOOST_REQUIRE(result.success);
 	BOOST_TEST(result.options == expectedOptions);
-	BOOST_TEST(result.reader.sourceCodes() == expectedSources);
+	BOOST_TEST(result.reader.sourceUnits() == expectedSources);
 	BOOST_TEST(result.reader.allowedDirectories() == expectedAllowedDirectories);
 	BOOST_TEST(result.reader.basePath() == expectedWorkDir / "base");
 }
@@ -776,7 +817,7 @@ BOOST_AUTO_TEST_CASE(cli_paths_to_source_unit_names_normalization_and_weird_name
 	BOOST_TEST(result.stdoutContent == "");
 	BOOST_REQUIRE(result.success);
 	BOOST_TEST(result.options == expectedOptions);
-	BOOST_TEST(result.reader.sourceCodes() == expectedSources);
+	BOOST_TEST(result.reader.sourceUnits() == expectedSources);
 	BOOST_TEST(result.reader.allowedDirectories() == expectedAllowedDirectories);
 	BOOST_TEST(result.reader.basePath() == expectedOptions.input.basePath);
 }
@@ -833,7 +874,7 @@ BOOST_AUTO_TEST_CASE(cli_paths_to_source_unit_names_symlinks)
 	BOOST_TEST(result.stdoutContent == "");
 	BOOST_REQUIRE(result.success);
 	BOOST_TEST(result.options == expectedOptions);
-	BOOST_TEST(result.reader.sourceCodes() == expectedSources);
+	BOOST_TEST(result.reader.sourceUnits() == expectedSources);
 	BOOST_TEST(result.reader.allowedDirectories() == expectedAllowedDirectories);
 	BOOST_TEST(result.reader.basePath() == expectedWorkDir / "sym/z/");
 }
@@ -854,7 +895,7 @@ BOOST_AUTO_TEST_CASE(cli_paths_to_source_unit_names_base_path_and_stdin)
 	expectedOptions.modelChecker.initialize = true;
 
 	map<string, string> expectedSources = {
-		{"<stdin>", "\n"},
+		{"<stdin>", ""},
 	};
 	FileReader::FileSystemPathSet expectedAllowedDirectories = {};
 
@@ -865,7 +906,7 @@ BOOST_AUTO_TEST_CASE(cli_paths_to_source_unit_names_base_path_and_stdin)
 	BOOST_TEST(result.stdoutContent == "");
 	BOOST_REQUIRE(result.success);
 	BOOST_TEST(result.options == expectedOptions);
-	BOOST_TEST(result.reader.sourceCodes() == expectedSources);
+	BOOST_TEST(result.reader.sourceUnits() == expectedSources);
 	BOOST_TEST(result.reader.allowedDirectories() == expectedAllowedDirectories);
 	BOOST_TEST(result.reader.basePath() == expectedWorkDir / "base");
 }
@@ -962,17 +1003,13 @@ BOOST_AUTO_TEST_CASE(cli_include_paths)
 		canonicalWorkDir / "lib",
 	};
 
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(
-		commandLine,
-		"",
-		true /* _processInput */
-	);
+	OptionsReaderAndMessages result = runCLI(commandLine, "");
 
 	BOOST_TEST(result.stderrContent == "");
 	BOOST_TEST(result.stdoutContent == "");
 	BOOST_REQUIRE(result.success);
 	BOOST_TEST(result.options == expectedOptions);
-	BOOST_TEST(result.reader.sourceCodes() == expectedSources);
+	BOOST_TEST(result.reader.sourceUnits() == expectedSources);
 	BOOST_TEST(result.reader.includePaths() == expectedIncludePaths);
 	BOOST_TEST(result.reader.allowedDirectories() == expectedAllowedDirectories);
 	BOOST_TEST(result.reader.basePath() == expectedWorkDir / "base/");
@@ -1052,11 +1089,7 @@ BOOST_AUTO_TEST_CASE(standard_json_include_paths)
 
 	FileReader::FileSystemPathSet expectedAllowedDirectories = {};
 
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(
-		commandLine,
-		standardJsonInput,
-		true /* _processInput */
-	);
+	OptionsReaderAndMessages result = runCLI(commandLine, standardJsonInput);
 
 	Json::Value parsedStdout;
 	string jsonParsingErrors;
@@ -1072,7 +1105,7 @@ BOOST_AUTO_TEST_CASE(standard_json_include_paths)
 
 	BOOST_REQUIRE(result.success);
 	BOOST_TEST(result.options == expectedOptions);
-	BOOST_TEST(result.reader.sourceCodes() == expectedSources);
+	BOOST_TEST(result.reader.sourceUnits() == expectedSources);
 	BOOST_TEST(result.reader.includePaths() == expectedIncludePaths);
 	BOOST_TEST(result.reader.allowedDirectories() == expectedAllowedDirectories);
 	BOOST_TEST(result.reader.basePath() == expectedWorkDir / "base/");
@@ -1084,18 +1117,19 @@ BOOST_AUTO_TEST_CASE(cli_include_paths_empty_path)
 	TemporaryWorkingDirectory tempWorkDir(tempDir);
 	createFilesWithParentDirs({tempDir.path() / "base/main.sol"});
 
-	string expectedMessage = "Empty values are not allowed in --include-path.\n";
+	string expectedMessage = "Empty values are not allowed in --include-path.";
 
-	vector<string> commandLine = {
-		"solc",
-		"--base-path=base/",
-		"--include-path", "include/",
-		"--include-path", "",
-		"base/main.sol",
-	};
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(commandLine);
-	BOOST_TEST(!result.success);
-	BOOST_TEST(result.stderrContent == expectedMessage);
+	BOOST_CHECK_EXCEPTION(
+		parseCommandLineAndReadInputFiles({
+			"solc",
+			"--base-path=base/",
+			"--include-path", "include/",
+			"--include-path", "",
+			"base/main.sol",
+		}),
+		CommandLineValidationError,
+		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+	);
 }
 
 BOOST_AUTO_TEST_CASE(cli_include_paths_without_base_path)
@@ -1104,12 +1138,13 @@ BOOST_AUTO_TEST_CASE(cli_include_paths_without_base_path)
 	TemporaryWorkingDirectory tempWorkDir(tempDir);
 	createFilesWithParentDirs({tempDir.path() / "contract.sol"});
 
-	string expectedMessage = "--include-path option requires a non-empty base path.\n";
+	string expectedMessage = "--include-path option requires a non-empty base path.";
 
-	vector<string> commandLine = {"solc", "--include-path", "include/", "contract.sol"};
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(commandLine);
-	BOOST_TEST(!result.success);
-	BOOST_TEST(result.stderrContent == expectedMessage);
+	BOOST_CHECK_EXCEPTION(
+		parseCommandLineAndReadInputFiles({"solc", "--include-path", "include/", "contract.sol"}),
+		CommandLineValidationError,
+		[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+	);
 }
 
 BOOST_AUTO_TEST_CASE(cli_include_paths_should_detect_source_unit_name_collisions)
@@ -1138,35 +1173,37 @@ BOOST_AUTO_TEST_CASE(cli_include_paths_should_detect_source_unit_name_collisions
 
 	{
 		// import "contract1.sol" and import "contract2.sol" would be ambiguous:
-		vector<string> commandLine = {
-			"solc",
-			"--base-path=dir1/",
-			"--include-path=dir2/",
-			"dir1/contract1.sol",
-			"dir2/contract1.sol",
-			"dir1/contract2.sol",
-			"dir2/contract2.sol",
-		};
-		OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(commandLine);
-		BOOST_TEST(result.stderrContent == expectedMessage);
-		BOOST_REQUIRE(!result.success);
+		BOOST_CHECK_EXCEPTION(
+			parseCommandLineAndReadInputFiles({
+				"solc",
+				"--base-path=dir1/",
+				"--include-path=dir2/",
+				"dir1/contract1.sol",
+				"dir2/contract1.sol",
+				"dir1/contract2.sol",
+				"dir2/contract2.sol",
+			}),
+			CommandLineValidationError,
+			[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+		);
 	}
 
 	{
 		// import "contract1.sol" and import "contract2.sol" would be ambiguous:
-		vector<string> commandLine = {
-			"solc",
-			"--base-path=dir3/",
-			"--include-path=dir1/",
-			"--include-path=dir2/",
-			"dir1/contract1.sol",
-			"dir2/contract1.sol",
-			"dir1/contract2.sol",
-			"dir2/contract2.sol",
-		};
-		OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(commandLine);
-		BOOST_TEST(result.stderrContent == expectedMessage);
-		BOOST_REQUIRE(!result.success);
+		BOOST_CHECK_EXCEPTION(
+			parseCommandLineAndReadInputFiles({
+				"solc",
+				"--base-path=dir3/",
+				"--include-path=dir1/",
+				"--include-path=dir2/",
+				"dir1/contract1.sol",
+				"dir2/contract1.sol",
+				"dir1/contract2.sol",
+				"dir2/contract2.sol",
+			}),
+			CommandLineValidationError,
+			[&](auto const& _exception) { BOOST_TEST(_exception.what() == expectedMessage); return true; }
+		);
 	}
 
 	{
@@ -1281,12 +1318,7 @@ BOOST_AUTO_TEST_CASE(cli_include_paths_ambiguous_import)
 		"3 | import \"contract.sol\";\n"
 		"  | ^^^^^^^^^^^^^^^^^^^^^^\n\n";
 
-	OptionsReaderAndMessages result = parseCommandLineAndReadInputFiles(
-		commandLine,
-		mainContractSource,
-		true /* _processInput */
-	);
-
+	OptionsReaderAndMessages result = runCLI(commandLine, mainContractSource);
 	BOOST_TEST(result.stderrContent == expectedMessage);
 	BOOST_REQUIRE(!result.success);
 }

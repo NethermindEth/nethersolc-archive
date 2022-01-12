@@ -19,6 +19,7 @@
 /// Unit tests for solc/CommandLineParser.h
 
 #include <solc/CommandLineParser.h>
+#include <solc/Exceptions.h>
 
 #include <test/solc/Common.h>
 
@@ -29,8 +30,6 @@
 #include <liblangutil/EVMVersion.h>
 #include <libsmtutil/SolverInterface.h>
 #include <libsolidity/interface/Version.h>
-
-#include <boost/algorithm/string.hpp>
 
 #include <map>
 #include <optional>
@@ -48,21 +47,13 @@ using namespace solidity::yul;
 namespace
 {
 
-optional<CommandLineOptions> parseCommandLine(vector<string> const& _commandLine, ostream& _stdout, ostream& _stderr)
+CommandLineOptions parseCommandLine(vector<string> const& _commandLine)
 {
 	vector<char const*> argv = test::makeArgv(_commandLine);
 
-	CommandLineParser cliParser(_stdout, _stderr);
-	bool success = cliParser.parse(
-		static_cast<int>(_commandLine.size()),
-		argv.data(),
-		false // interactiveTerminal
-	);
-
-	if (!success)
-		return nullopt;
-	else
-		return cliParser.options();
+	CommandLineParser cliParser;
+	cliParser.parse(static_cast<int>(_commandLine.size()), argv.data());
+	return cliParser.options();
 }
 
 } // namespace
@@ -81,24 +72,28 @@ BOOST_AUTO_TEST_CASE(no_options)
 	expectedOptions.modelChecker.initialize = true;
 	expectedOptions.modelChecker.settings = {};
 
-	stringstream sout, serr;
-	optional<CommandLineOptions> parsedOptions = parseCommandLine(commandLine, sout, serr);
+	CommandLineOptions parsedOptions = parseCommandLine(commandLine);
 
-	BOOST_TEST(sout.str() == "");
-	BOOST_TEST(serr.str() == "");
-	BOOST_REQUIRE(parsedOptions.has_value());
-	BOOST_TEST(parsedOptions.value() == expectedOptions);
+	BOOST_TEST(parsedOptions == expectedOptions);
 }
 
-BOOST_AUTO_TEST_CASE(help)
+BOOST_AUTO_TEST_CASE(help_license_version)
 {
-	stringstream sout, serr;
-	optional<CommandLineOptions> parsedOptions = parseCommandLine({"solc", "--help"}, sout, serr);
+	map<string, InputMode> expectedModePerOption = {
+		{"--help", InputMode::Help},
+		{"--license", InputMode::License},
+		{"--version", InputMode::Version},
+	};
 
-	BOOST_TEST(serr.str() == "");
-	BOOST_TEST(boost::starts_with(sout.str(), "solc, the Solidity commandline compiler."));
-	BOOST_TEST(sout.str().find("Usage: solc [options] [input_file...]") != string::npos);
-	BOOST_TEST(!parsedOptions.has_value());
+	for (auto const& [option, expectedMode]: expectedModePerOption)
+	{
+		CommandLineOptions parsedOptions = parseCommandLine({"solc", option});
+
+		CommandLineOptions expectedOptions;
+		expectedOptions.input.mode = expectedMode;
+
+		BOOST_TEST(parsedOptions == expectedOptions);
+	}
 }
 
 BOOST_AUTO_TEST_CASE(cli_mode_options)
@@ -127,6 +122,7 @@ BOOST_AUTO_TEST_CASE(cli_mode_options)
 			"--evm-version=spuriousDragon",
 			"--experimental-via-ir",
 			"--revert-strings=strip",
+			"--debug-info=location",
 			"--pretty-json",
 			"--json-indent=7",
 			"--no-color",
@@ -148,6 +144,7 @@ BOOST_AUTO_TEST_CASE(cli_mode_options)
 			"--model-checker-contracts=contract1.yul:A,contract2.yul:B",
 			"--model-checker-div-mod-no-slacks",
 			"--model-checker-engine=bmc",
+			"--model-checker-invariants=contract,reentrancy",
 			"--model-checker-show-unproved",
 			"--model-checker-solvers=z3,smtlib2",
 			"--model-checker-targets=underflow,divByZero",
@@ -180,6 +177,7 @@ BOOST_AUTO_TEST_CASE(cli_mode_options)
 		expectedOptions.output.evmVersion = EVMVersion::spuriousDragon();
 		expectedOptions.output.experimentalViaIR = true;
 		expectedOptions.output.revertStrings = RevertStrings::Strip;
+		expectedOptions.output.debugInfoSelection = DebugInfoSelection::fromString("location");
 		expectedOptions.formatting.json = JsonFormat{JsonFormat::Pretty, 7};
 		expectedOptions.linker.libraries = {
 			{"dir1/file1.sol:L", h160("1234567890123456789012345678901234567890")},
@@ -191,7 +189,9 @@ BOOST_AUTO_TEST_CASE(cli_mode_options)
 			true, true, true, true, true,
 			true, true, true, true, true,
 			true, true, true, true, true,
+			true,
 		};
+		expectedOptions.compiler.outputs.ewasmIR = false;
 		expectedOptions.compiler.estimateGas = true;
 		expectedOptions.compiler.combinedJsonRequests = {
 			true, true, true, true, true,
@@ -210,19 +210,16 @@ BOOST_AUTO_TEST_CASE(cli_mode_options)
 			{{{"contract1.yul", {"A"}}, {"contract2.yul", {"B"}}}},
 			true,
 			{true, false},
+			{{InvariantType::Contract, InvariantType::Reentrancy}},
 			true,
 			{false, true, true},
 			{{VerificationTargetType::Underflow, VerificationTargetType::DivByZero}},
 			5,
 		};
 
-		stringstream sout, serr;
-		optional<CommandLineOptions> parsedOptions = parseCommandLine(commandLine, sout, serr);
+		CommandLineOptions parsedOptions = parseCommandLine(commandLine);
 
-		BOOST_TEST(sout.str() == "");
-		BOOST_TEST(serr.str() == "");
-		BOOST_REQUIRE(parsedOptions.has_value());
-		BOOST_TEST(parsedOptions.value() == expectedOptions);
+		BOOST_TEST(parsedOptions == expectedOptions);
 	}
 }
 
@@ -265,10 +262,10 @@ BOOST_AUTO_TEST_CASE(assembly_mode_options)
 			"--include-path=/home/user/include",
 			"--allow-paths=/tmp,/home,project,../contracts",
 			"--ignore-missing",
-			"--error-recovery",            // Ignored in assembly mode
 			"--overwrite",
 			"--evm-version=spuriousDragon",
 			"--revert-strings=strip",      // Accepted but has no effect in assembly mode
+			"--debug-info=location",
 			"--pretty-json",
 			"--json-indent=1",
 			"--no-color",
@@ -283,16 +280,18 @@ BOOST_AUTO_TEST_CASE(assembly_mode_options)
 				"contract2.yul:B",
 			"--model-checker-div-mod-no-slacks", // Ignored in assembly mode
 			"--model-checker-engine=bmc",  // Ignored in assembly mode
+			"--model-checker-invariants=contract,reentrancy",  // Ignored in assembly mode
 			"--model-checker-show-unproved", // Ignored in assembly mode
 			"--model-checker-solvers=z3,smtlib2", // Ignored in assembly mode
 			"--model-checker-targets="     // Ignored in assembly mode
 				"underflow,"
 				"divByZero",
 			"--model-checker-timeout=5",   // Ignored in assembly mode
-
-			// Accepted but has no effect in assembly mode
-			"--ast-compact-json", "--asm", "--asm-json", "--opcodes", "--bin", "--bin-runtime", "--abi",
-			"--ir", "--ir-optimized", "--ewasm", "--hashes", "--userdoc", "--devdoc", "--metadata", "--storage-layout",
+			"--asm",
+			"--bin",
+			"--ir-optimized",
+			"--ewasm",
+			"--ewasm-ir",
 		};
 		commandLine += assemblyOptions;
 		if (expectedLanguage == AssemblyStack::Language::StrictAssembly || expectedLanguage == AssemblyStack::Language::Ewasm)
@@ -319,6 +318,7 @@ BOOST_AUTO_TEST_CASE(assembly_mode_options)
 		expectedOptions.output.overwriteFiles = true;
 		expectedOptions.output.evmVersion = EVMVersion::spuriousDragon();
 		expectedOptions.output.revertStrings = RevertStrings::Strip;
+		expectedOptions.output.debugInfoSelection = DebugInfoSelection::fromString("location");
 		expectedOptions.formatting.json = JsonFormat {JsonFormat::Pretty, 1};
 		expectedOptions.assembly.targetMachine = expectedMachine;
 		expectedOptions.assembly.inputLanguage = expectedLanguage;
@@ -328,11 +328,11 @@ BOOST_AUTO_TEST_CASE(assembly_mode_options)
 		};
 		expectedOptions.formatting.coloredOutput = false;
 		expectedOptions.formatting.withErrorIds = true;
-		expectedOptions.compiler.outputs = {
-			true, true, true, true, true,
-			true, true, true, true, true,
-			true, true, true, true, true,
-		};
+		expectedOptions.compiler.outputs.asm_ = true;
+		expectedOptions.compiler.outputs.binary = true;
+		expectedOptions.compiler.outputs.irOptimized = true;
+		expectedOptions.compiler.outputs.ewasm = true;
+		expectedOptions.compiler.outputs.ewasmIR = true;
 		if (expectedLanguage == AssemblyStack::Language::StrictAssembly || expectedLanguage == AssemblyStack::Language::Ewasm)
 		{
 			expectedOptions.optimizer.enabled = true;
@@ -340,13 +340,9 @@ BOOST_AUTO_TEST_CASE(assembly_mode_options)
 			expectedOptions.optimizer.expectedExecutionsPerDeployment = 1000;
 		}
 
-		stringstream sout, serr;
-		optional<CommandLineOptions> parsedOptions = parseCommandLine(commandLine, sout, serr);
+		CommandLineOptions parsedOptions = parseCommandLine(commandLine);
 
-		BOOST_TEST(sout.str() == "");
-		BOOST_TEST(serr.str() == "Warning: Yul is still experimental. Please use the output with care.\n");
-		BOOST_REQUIRE(parsedOptions.has_value());
-		BOOST_TEST(parsedOptions.value() == expectedOptions);
+		BOOST_TEST(parsedOptions == expectedOptions);
 	}
 }
 
@@ -361,7 +357,6 @@ BOOST_AUTO_TEST_CASE(standard_json_mode_options)
 		"--include-path=/home/user/include",
 		"--allow-paths=/tmp,/home,project,../contracts",
 		"--ignore-missing",
-		"--error-recovery",                // Ignored in Standard JSON mode
 		"--output-dir=/tmp/out",           // Accepted but has no effect in Standard JSON mode
 		"--overwrite",                     // Accepted but has no effect in Standard JSON mode
 		"--evm-version=spuriousDragon",    // Ignored in Standard JSON mode
@@ -382,16 +377,13 @@ BOOST_AUTO_TEST_CASE(standard_json_mode_options)
 			"contract2.yul:B",
 		"--model-checker-div-mod-no-slacks", // Ignored in Standard JSON mode
 		"--model-checker-engine=bmc",      // Ignored in Standard JSON mode
+		"--model-checker-invariants=contract,reentrancy",      // Ignored in Standard JSON mode
 		"--model-checker-show-unproved",      // Ignored in Standard JSON mode
 		"--model-checker-solvers=z3,smtlib2", // Ignored in Standard JSON mode
 		"--model-checker-targets="         // Ignored in Standard JSON mode
 			"underflow,"
 			"divByZero",
 		"--model-checker-timeout=5",       // Ignored in Standard JSON mode
-
-		// Accepted but has no effect in Standard JSON mode
-		"--ast-compact-json", "--asm", "--asm-json", "--opcodes", "--bin", "--bin-runtime", "--abi",
-		"--ir", "--ir-optimized", "--ewasm", "--hashes", "--userdoc", "--devdoc", "--metadata", "--storage-layout",
 	};
 
 	CommandLineOptions expectedOptions;
@@ -408,49 +400,35 @@ BOOST_AUTO_TEST_CASE(standard_json_mode_options)
 	expectedOptions.formatting.json = JsonFormat {JsonFormat::Pretty, 1};
 	expectedOptions.formatting.coloredOutput = false;
 	expectedOptions.formatting.withErrorIds = true;
-	expectedOptions.compiler.outputs = {
-		true, true, true, true, true,
-		true, true, true, true, true,
-		true, true, true, true, true,
-	};
 	expectedOptions.compiler.estimateGas = true;
 	expectedOptions.compiler.combinedJsonRequests = CombinedJsonRequests{};
 	expectedOptions.compiler.combinedJsonRequests->abi = true;
 	expectedOptions.compiler.combinedJsonRequests->binary = true;
 
-	stringstream sout, serr;
-	optional<CommandLineOptions> parsedOptions = parseCommandLine(commandLine, sout, serr);
+	CommandLineOptions parsedOptions = parseCommandLine(commandLine);
 
-	BOOST_TEST(sout.str() == "");
-	BOOST_TEST(serr.str() == "");
-	BOOST_REQUIRE(parsedOptions.has_value());
-	BOOST_TEST(parsedOptions.value() == expectedOptions);
+	BOOST_TEST(parsedOptions == expectedOptions);
 }
 
-BOOST_AUTO_TEST_CASE(experimental_via_ir_invalid_input_modes)
+BOOST_AUTO_TEST_CASE(invalid_options_input_modes_combinations)
 {
-	static array<string, 5> const inputModeOptions = {
-		"--assemble",
-		"--yul",
-		"--strict-assembly",
-		"--standard-json",
-		"--link",
+	map<string, vector<string>> invalidOptionInputModeCombinations = {
+		// TODO: This should eventually contain all options.
+		{"--error-recovery", {"--assemble", "--yul", "--strict-assembly", "--standard-json", "--link"}},
+		{"--experimental-via-ir", {"--assemble", "--yul", "--strict-assembly", "--standard-json", "--link"}}
 	};
-	for (string const& inputModeOption: inputModeOptions)
-	{
-		stringstream sout, serr;
-		vector<string> commandLine = {
-			"solc",
-			"--experimental-via-ir",
-			"file",
-			inputModeOption,
-		};
-		optional<CommandLineOptions> parsedOptions = parseCommandLine(commandLine, sout, serr);
 
-		BOOST_TEST(sout.str() == "");
-		BOOST_TEST(serr.str() == "The option --experimental-via-ir is only supported in the compiler mode.\n");
-		BOOST_REQUIRE(!parsedOptions.has_value());
-	}
+	for (auto const& [optionName, inputModes]: invalidOptionInputModeCombinations)
+		for (string const& inputMode: inputModes)
+		{
+			stringstream serr;
+			vector<string> commandLine = {"solc", optionName, "file", inputMode};
+
+			string expectedMessage = "The following options are not supported in the current input mode: " + optionName;
+			auto hasCorrectMessage = [&](CommandLineValidationError const& _exception) { return _exception.what() == expectedMessage; };
+
+			BOOST_CHECK_EXCEPTION(parseCommandLine(commandLine), CommandLineValidationError, hasCorrectMessage);
+		}
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -166,7 +166,7 @@ Inside a code block, the following elements can be used
 - if statements, e.g. ``if lt(a, b) { sstore(0, 1) }``
 - switch statements, e.g. ``switch mload(0) case 0 { revert() } default { mstore(0, 1) }``
 - for loops, e.g. ``for { let i := 0} lt(i, 10) { i := add(i, 1) } { mstore(i, 7) }``
-- function definitions, e.g. ``function f(a, b) -> c { c := add(a, b) }```
+- function definitions, e.g. ``function f(a, b) -> c { c := add(a, b) }``
 
 Multiple syntactical elements can follow each other simply separated by
 whitespace, i.e. there is no terminating ``;`` or newline required.
@@ -541,10 +541,24 @@ evaluate to zero values.
 
 In all other situations, expressions have to evaluate to exactly one value.
 
-The ``continue`` and ``break`` statements can only be used inside loop bodies
-and have to be in the same function as the loop (or both have to be at the
-top level). The ``continue`` and ``break`` statements cannot be used
-in other parts of a loop, not even when it is scoped inside a second loop's body.
+A ``continue`` or ``break`` statement can only be used inside the body of a for-loop, as follows.
+Consider the innermost loop that contains the statement.
+The loop and the statement must be in the same function, or both must be at the top level.
+The statement must be in the loop's body block;
+it cannot be in the loop's initialization block or update block.
+It is worth emphasizing that this restriction applies just
+to the innermost loop that contains the ``continue`` or ``break`` statement:
+this innermost loop, and therefore the ``continue`` or ``break`` statement,
+may appear anywhere in an outer loop, possibly in an outer loop's initialization block or update block.
+For example, the following is legal,
+because the ``break`` occurs in the body block of the inner loop,
+despite also occurring in the update block of the outer loop:
+
+.. code-block:: yul
+
+    for {} true { for {} true {} { break } }
+    {
+    }
 
 The condition part of the for-loop has to evaluate to exactly one value.
 
@@ -714,13 +728,15 @@ We will use a destructuring notation for the AST nodes.
         L'[$parami] = vi and L'[$reti] = 0 for all i.
         Let G'', L'', mode = E(Gn, L', block)
         G'', Ln, L''[$ret1], ..., L''[$retm]
-    E(G, L, l: StringLiteral) = G, L, utf8EncodeLeftAligned(l),
-        where utf8EncodeLeftAligned performs a UTF-8 encoding of l
-        and aligns it left into 32 bytes
+    E(G, L, l: StringLiteral) = G, L, str(l),
+        where str is the string evaluation function,
+        which for the EVM dialect is defined in the section 'Literals' above
     E(G, L, n: HexNumber) = G, L, hex(n)
-        where hex is the hexadecimal decoding function
+        where hex is the hexadecimal evaluation function,
+        which turns a sequence of hexadecimal digits into their big endian value
     E(G, L, n: DecimalNumber) = G, L, dec(n),
-        where dec is the decimal decoding function
+        where dec is the decimal evaluation function,
+        which turns a sequence of decimal digits into their big endian value
 
 .. _opcodes:
 
@@ -959,10 +975,13 @@ to ``loadimmutable("name")`` in the runtime code.
 
 linkersymbol
 ^^^^^^^^^^^^
-
-The function ``linkersymbol("fq_library_name")`` is a placeholder for an address literal to be
-substituted by the linker. Its first and only argument must be a string literal and represents the
-fully qualified library name used with the ``--libraries`` option.
+The function ``linkersymbol("library_id")`` is a placeholder for an address literal to be substituted
+by the linker.
+Its first and only argument must be a string literal and uniquely represents the address to be inserted.
+Identifiers can be arbitrary but when the compiler produces Yul code from Solidity sources,
+it uses a library name qualified with the name of the source unit that defines that library.
+To link the code with a particular library address, the same identifier must be provided to the
+``--libraries`` option on the command line.
 
 For example this code
 
@@ -1001,6 +1020,8 @@ If the optimizer does not need to reserve any memory, it holds that ``ptr == siz
 within one Yul subobject. If at least one ``memoryguard`` call is found in a subobject,
 the additional optimiser steps will be run on it.
 
+
+.. _yul-verbatim:
 
 verbatim
 ^^^^^^^^
@@ -1263,6 +1284,7 @@ Abbreviation Full name
 ``a``        ``SSATransform``
 ``t``        ``StructuralSimplifier``
 ``u``        ``UnusedPruner``
+``p``        ``UnusedFunctionParameterPruner``
 ``d``        ``VarDeclInitializer``
 ============ ===============================
 

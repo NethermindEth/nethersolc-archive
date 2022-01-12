@@ -74,16 +74,20 @@ string solidity::util::readFileAsString(boost::filesystem::path const& _file)
 
 string solidity::util::readUntilEnd(istream& _stdin)
 {
-	string ret;
-	while (!_stdin.eof())
-	{
-		string tmp;
-		// NOTE: this will read until EOF or NL
-		getline(_stdin, tmp);
-		ret.append(tmp);
-		ret.append("\n");
-	}
-	return ret;
+	ostringstream ss;
+	ss << _stdin.rdbuf();
+	return ss.str();
+}
+
+string solidity::util::readBytes(istream& _input, size_t _length)
+{
+	string output;
+	output.resize(_length);
+	_input.read(output.data(), static_cast<streamsize>(_length));
+	// If read() reads fewer bytes it sets failbit in addition to eofbit.
+	if (_input.fail())
+		output.resize(static_cast<size_t>(_input.gcount()));
+	return output;
 }
 
 #if defined(_WIN32)
