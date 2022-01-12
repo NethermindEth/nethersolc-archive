@@ -3874,7 +3874,7 @@ string YulUtilFunctions::packedHashFunction(
 			function <functionName>(<variables>) -> hash {
 				let pos := <allocateUnbounded>()
 				let end := <packedEncode>(pos <comma> <variables>)
-				hash := keccak256(pos, sub(end, pos))
+				hash := pedersen(pos, sub(end, pos))
 			}
 		)");
 		templ("functionName", functionName);
