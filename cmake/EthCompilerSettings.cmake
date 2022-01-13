@@ -33,6 +33,7 @@ eth_add_cxx_compiler_flag_if_supported("-fmacro-prefix-map=${CMAKE_SOURCE_DIR}=/
 # variable in a return statement when the variable is the same type as the
 # return type or using a move to create a new object from a temporary object.
 eth_add_cxx_compiler_flag_if_supported(-Wpessimizing-move)
+eth_add_cxx_compiler_flag_if_supported(-lboost_unit_test_framework)
 
 # -Wredundant-move warns when an implicit move would already be made, so the
 # std::move call is not needed, such as when moving a local variable in a return

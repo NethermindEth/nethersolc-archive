@@ -214,4 +214,3 @@ if (NOT Boost_USE_STATIC_LIBS)
 endif()
 
 add_subdirectory(tools)
-add_subdirectory(evmc)

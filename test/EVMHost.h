@@ -22,9 +22,9 @@
 
 #pragma once
 
-#include <test/evmc/mocked_host.hpp>
-#include <test/evmc/evmc.hpp>
-#include <test/evmc/evmc.h>
+#include <evmc/mocked_host.hpp>
+#include <evmc/evmc.hpp>
+#include <evmc/evmc.h>
 
 #include <liblangutil/EVMVersion.h>
 

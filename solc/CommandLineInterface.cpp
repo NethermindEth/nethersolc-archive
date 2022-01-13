@@ -82,11 +82,16 @@
 	#define STDERR_FILENO 2
 #endif
 
+#include <test/TestCaseReader.h>
+#include <test/libsolidity/util/TestFunctionCall.h>
+#include <test/libsolidity/util/TestFileParser.h>
+
 
 using namespace std;
 using namespace solidity;
 using namespace solidity::util;
 using namespace solidity::langutil;
+using namespace solidity::frontend::test;
 
 namespace solidity::frontend
 {
@@ -414,7 +419,8 @@ void CommandLineInterface::readInputFiles()
 	if (
 		m_options.input.mode == InputMode::Help ||
 		m_options.input.mode == InputMode::License ||
-		m_options.input.mode == InputMode::Version
+		m_options.input.mode == InputMode::Version ||
+		m_options.input.mode == InputMode::ParseSemanticTestExpectations
 	)
 		return;
 
@@ -645,6 +651,10 @@ void CommandLineInterface::processInput()
 	case InputMode::CompilerWithASTImport:
 		compile();
 		outputCompilationResults();
+    break;
+  case InputMode::ParseSemanticTestExpectations:
+    parseSemanticTestExpectations();
+    break;
 	}
 }
 
@@ -1167,4 +1177,57 @@ void CommandLineInterface::outputCompilationResults()
 	}
 }
 
+void CommandLineInterface::parseSemanticTestExpectations() {
+  sout() << "Semantic Tests" << endl;
+  TestCaseReader tcr = TestCaseReader("../test/libsolidity/semanticTests/functionCall/named_args.sol");
+  tcr.sources();
+  vector<solidity::frontend::test::FunctionCall> test = TestFileParser{tcr.stream(), makeBuiltins()}.parseFunctionCalls(tcr.lineNumber());
+  sout() << test[0].signature << endl;
+
 }
+
+map<string, Builtin> CommandLineInterface::makeBuiltins()
+{
+	return {
+		{
+			"isoltest_builtin_test",
+			[](solidity::frontend::test::FunctionCall const&) -> optional<bytes>
+			{
+				return toBigEndian(u256(0x1234));
+			}
+		},
+		{
+			"isoltest_side_effects_test",
+			[](solidity::frontend::test::FunctionCall const& _call) -> optional<bytes>
+			{
+				if (_call.arguments.parameters.empty())
+					return toBigEndian(0);
+				else
+					return _call.arguments.rawBytes();
+			}
+		},
+		{
+			"balance",
+			[](solidity::frontend::test::FunctionCall const&) -> optional<bytes>
+			{
+				return toBigEndian(0);
+			}
+		},
+		{
+			"storageEmpty",
+			[](solidity::frontend::test::FunctionCall const&) -> optional<bytes>
+			{
+				return toBigEndian(0);
+		 	}
+		},
+		{
+			"account",
+			[](solidity::frontend::test::FunctionCall const&) -> optional<bytes>
+			{
+				return toBigEndian(0);
+			}
+		},
+	};
+}
+}
+

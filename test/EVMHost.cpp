@@ -22,7 +22,7 @@
 
 #include <test/EVMHost.h>
 
-#include <test/evmc/loader.h>
+#include <evmc/loader.h>
 
 #include <libevmasm/GasMeter.h>
 

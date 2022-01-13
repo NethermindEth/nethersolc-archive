@@ -27,6 +27,8 @@
 #include <libsolidity/interface/CompilerStack.h>
 #include <libsolidity/interface/DebugSettings.h>
 #include <libsolidity/interface/FileReader.h>
+#include <test/libsolidity/util/SoltestTypes.h>
+#include <test/libsolidity/util/TestFileParser.h>
 #include <libyul/AssemblyStack.h>
 
 #include <iostream>
@@ -93,6 +95,8 @@ private:
 	void assemble(yul::AssemblyStack::Language _language, yul::AssemblyStack::Machine _targetMachine);
 
 	void outputCompilationResults();
+  void parseSemanticTestExpectations();
+  std::map<std::string, solidity::frontend::test::Builtin> makeBuiltins();
 
 	void handleCombinedJSON();
 	void handleAst();

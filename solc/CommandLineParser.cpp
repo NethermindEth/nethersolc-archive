@@ -82,6 +82,7 @@ static string const g_strOverwrite = "overwrite";
 static string const g_strRevertStrings = "revert-strings";
 static string const g_strStopAfter = "stop-after";
 static string const g_strParsing = "parsing";
+static string const g_strSemanticTestExpectations = "semantic-tests";
 
 /// Possible arguments to for --revert-strings
 static set<string> const g_revertStringsArgs
@@ -137,6 +138,7 @@ static map<InputMode, string> const g_inputModeName = {
 	{InputMode::StandardJson, "standard JSON"},
 	{InputMode::Linker, "linker"},
 	{InputMode::LanguageServer, "language server (LSP)"},
+	{InputMode::ParseSemanticTestExpectations, "parse semantic test expectations"},
 };
 
 void CommandLineParser::checkMutuallyExclusive(vector<string> const& _optionNames)
@@ -458,6 +460,7 @@ void CommandLineParser::parseOutputSelection()
 		case InputMode::License:
 		case InputMode::Version:
 		case InputMode::LanguageServer:
+    case InputMode::ParseSemanticTestExpectations:
 			solAssert(false);
 		case InputMode::Compiler:
 		case InputMode::CompilerWithASTImport:
@@ -525,6 +528,7 @@ General Information)").c_str(),
 		(g_strHelp.c_str(), "Show help message and exit.")
 		(g_strVersion.c_str(), "Show version and exit.")
 		(g_strLicense.c_str(), "Show licensing information and exit.")
+    (g_strSemanticTestExpectations.c_str(), "Switch to test parse mode")
 	;
 
 	po::options_description inputOptions("Input Options");
@@ -867,6 +871,7 @@ void CommandLineParser::processArgs()
 		g_strHelp,
 		g_strLicense,
 		g_strVersion,
+		g_strSemanticTestExpectations,
 		g_strStandardJSON,
 		g_strLink,
 		g_strAssemble,
@@ -892,13 +897,16 @@ void CommandLineParser::processArgs()
 		m_options.input.mode = InputMode::Linker;
 	else if (m_args.count(g_strImportAst) > 0)
 		m_options.input.mode = InputMode::CompilerWithASTImport;
+  else if (m_args.count(g_strSemanticTestExpectations) > 0)
+    m_options.input.mode = InputMode::ParseSemanticTestExpectations;
 	else
 		m_options.input.mode = InputMode::Compiler;
 
 	if (
 		m_options.input.mode == InputMode::Help ||
 		m_options.input.mode == InputMode::License ||
-		m_options.input.mode == InputMode::Version
+		m_options.input.mode == InputMode::Version ||
+		m_options.input.mode == InputMode::ParseSemanticTestExpectations
 	)
 		return;
 

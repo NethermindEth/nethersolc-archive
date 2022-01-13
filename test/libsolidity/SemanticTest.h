@@ -83,11 +83,11 @@ public:
 	/// Compiles and deploys currently held source.
 	/// Returns true if deployment was successful, false otherwise.
 	bool deploy(std::string const& _contractName, u256 const& _value, bytes const& _arguments, std::map<std::string, solidity::test::Address> const& _libraries = {});
+	std::map<std::string, Builtin> makeBuiltins();
 
 private:
 	TestResult runTest(std::ostream& _stream, std::string const& _linePrefix, bool _formatted, bool _isYulRun, bool _isEwasmRun);
 	bool checkGasCostExpectation(TestFunctionCall& io_test, bool _compileViaYul) const;
-	std::map<std::string, Builtin> makeBuiltins();
 	std::vector<SideEffectHook> makeSideEffectHooks() const;
 	std::vector<std::string> eventSideEffectHook(FunctionCall const&) const;
 	std::optional<AnnotatedEventSignature> matchEvent(util::h256 const& hash) const;
