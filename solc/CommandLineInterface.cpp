@@ -122,6 +122,7 @@ static string const g_strGeneratedSources = "generated-sources";
 static string const g_strGeneratedSourcesRuntime = "generated-sources-runtime";
 static string const g_strNatspecDev = "devdoc";
 static string const g_strNatspecUser = "userdoc";
+static string const g_strIrOptimizedAst = "ir-optimized-ast";
 static string const g_strOpcodes = "opcodes";
 static string const g_strSignatureHashes = "hashes";
 static string const g_strSourceList = "sourceList";
@@ -827,6 +828,8 @@ void CommandLineInterface::handleCombinedJSON()
 			contractData[g_strNatspecDev] = m_compiler->natspecDev(contractName);
 		if (m_options.compiler.combinedJsonRequests->natspecUser)
 			contractData[g_strNatspecUser] = m_compiler->natspecUser(contractName);
+		if (m_options.compiler.combinedJsonRequests->irOptimizedAst)
+			contractData[g_strIrOptimizedAst] = m_compiler->irOptimizedAST(contractName);
 	}
 
 	bool needsSourceList =

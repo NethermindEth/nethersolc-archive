@@ -271,6 +271,9 @@ public:
 	/// @returns the optimized IR representation of a contract.
 	std::string const& yulIROptimized(std::string const& _contractName) const;
 
+	/// @returns a JSON representation of the optimized yul.
+	Json::Value irOptimizedAST(std::string const& _contractName);
+
 	/// @returns the Ewasm text representation of a contract.
 	std::string const& ewasm(std::string const& _contractName) const;
 

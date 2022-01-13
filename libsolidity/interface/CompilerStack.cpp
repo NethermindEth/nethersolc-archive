@@ -69,6 +69,7 @@
 
 #include <liblangutil/Scanner.h>
 #include <liblangutil/SemVerHandler.h>
+#include <liblangutil/SourceReferenceFormatter.h>
 
 #include <libevmasm/Exceptions.h>
 
@@ -865,6 +866,50 @@ string const& CompilerStack::yulIROptimized(string const& _contractName) const
 		solThrow(CompilerError, "Compilation was not successful.");
 
 	return contract(_contractName).yulIROptimized;
+}
+
+Json::Value CompilerStack::irOptimizedAST(string const& _contractName)
+{
+	generateIR(contractDefinition(_contractName));
+	string const& source = yulIROptimized(_contractName);
+	if (source.empty()) {
+		return Json::Value{};
+	}
+	auto sourceNamePtr = contractDefinition(_contractName).location().sourceName;
+	string sourceName = sourceNamePtr ? *sourceNamePtr : "";
+	unsigned sourceIndex = sourceIndices()[sourceName];
+	ErrorList errors{};
+	ErrorReporter errorReporter{errors};
+	CharStream charStream{source, sourceName};
+	auto const& yulDialect = yul::EVMDialect::strictAssemblyForEVMObjects(m_evmVersion);
+	yul::ObjectParser objectParser{errorReporter, yulDialect};
+	auto scanner = make_shared<langutil::Scanner>(charStream);
+	auto object = objectParser.parse(scanner, false);
+	if (!object or !errors.empty())
+	{
+		SingletonCharStreamProvider streamProvider{charStream};
+		SourceReferenceFormatter{cerr, streamProvider, true, false}.printErrorInformation(errors);
+		cerr << endl;
+		solAssert(false, "Parsing yul code failed");
+	}
+
+	auto deploymentCode = object->code;
+	std::shared_ptr<yul::Block> runtimeCode{};
+	std::string runtimeObjectName = object->name.str() + "_deployed";
+	for (auto&& subObject: object->subObjects)
+		if (subObject && subObject->name.str() == runtimeObjectName)
+			if (auto* runtimeObject = dynamic_cast<yul::Object*>(subObject.get()))
+			{
+				runtimeCode = runtimeObject->code;
+				break;
+			}
+	solAssert(runtimeCode, "Runtime code not found in the yul object");
+
+	yul::AsmJsonConverter jsonConverter{sourceIndex};
+	Json::Value ret{Json::objectValue};
+	ret["deploymentCode"] = jsonConverter(*deploymentCode);
+	ret["runtimeCode"] = jsonConverter(*runtimeCode);
+	return ret;
 }
 
 string const& CompilerStack::ewasm(string const& _contractName) const

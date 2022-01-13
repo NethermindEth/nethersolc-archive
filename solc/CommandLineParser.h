@@ -134,6 +134,7 @@ struct CombinedJsonRequests
 			{"devdoc", &CombinedJsonRequests::natspecDev},
 			{"userdoc", &CombinedJsonRequests::natspecUser},
 			{"ast", &CombinedJsonRequests::ast},
+			{"ir-optimized-ast", &CombinedJsonRequests::irOptimizedAst},
 		};
 		return components;
 	}
@@ -155,6 +156,7 @@ struct CombinedJsonRequests
 	bool natspecDev = false;
 	bool natspecUser = false;
 	bool ast = false;
+	bool irOptimizedAst = false;
 };
 
 struct CommandLineOptions
