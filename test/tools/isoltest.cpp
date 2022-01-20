@@ -24,6 +24,7 @@
 #include <test/tools/IsolTestOptions.h>
 #include <test/InteractiveTests.h>
 #include <test/EVMHost.h>
+#include <test/tools/expectations.h>
 
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/filesystem.hpp>
@@ -431,6 +432,12 @@ int main(int argc, char const *argv[])
 
 		auto& options = dynamic_cast<solidity::test::IsolTestOptions const&>(solidity::test::CommonOptions::get());
 
+		if (options.printTestExpectation)
+		{
+			printSemanticTests(options.testPath.string());
+			return 0;
+		}
+
 		if (!solidity::test::loadVMs(options))
 			return 1;
 
@@ -486,3 +493,4 @@ int main(int argc, char const *argv[])
 		return 1;
 	}
 }
+
