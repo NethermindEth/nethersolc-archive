@@ -46,6 +46,8 @@ set(sources
 	analysis/TypeChecker.h
 	analysis/ViewPureChecker.cpp
 	analysis/ViewPureChecker.h
+	analysis/ForbiddenSyntax.h
+	analysis/ForbiddenSyntax.cpp
 	ast/AST.cpp
 	ast/AST.h
 	ast/AST_accept.h

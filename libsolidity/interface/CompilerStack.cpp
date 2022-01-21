@@ -39,6 +39,7 @@
 #include <libsolidity/analysis/PostTypeContractLevelChecker.h>
 #include <libsolidity/analysis/StaticAnalyzer.h>
 #include <libsolidity/analysis/SyntaxChecker.h>
+#include <libsolidity/analysis/ForbiddenSyntax.h>
 #include <libsolidity/analysis/Scoper.h>
 #include <libsolidity/analysis/TypeChecker.h>
 #include <libsolidity/analysis/ViewPureChecker.h>
@@ -423,10 +424,15 @@ bool CompilerStack::analyze()
 	try
 	{
 		SyntaxChecker syntaxChecker(m_errorReporter, m_optimiserSettings.runYulOptimiser);
-		for (Source const* source: m_sourceOrder)
+		ForbiddenSyntax forbiddenSyntaxChecker(m_errorReporter);
+
+		for (Source const* source: m_sourceOrder) {
 			if (source->ast && !syntaxChecker.checkSyntax(*source->ast))
 				noErrors = false;
 
+			if (source->ast && !forbiddenSyntaxChecker.containsForbiddenSyntax(*source->ast))
+				noErrors = false;
+		}
 		m_globalContext = make_shared<GlobalContext>();
 		// We need to keep the same resolver during the whole process.
 		NameAndTypeResolver resolver(*m_globalContext, m_evmVersion, m_errorReporter);
