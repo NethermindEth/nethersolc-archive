@@ -7,49 +7,73 @@ on:
   pull_request:
 
 jobs:
-  build-and-test:
-    runs-on: ${{ matrix.config.os }}
-    strategy:
-      matrix:
-        config:
-          - os: ubuntu-latest
-
+  build-and-test-arm:
+    runs-on: ubuntu-20.04
+    name: Build on ubuntu-20.04 armv7
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
-
-      - name: Set up GCC
-        uses: egor-tensin/setup-gcc@v1
+      
+      - name: Run on ARM
+      - uses: uraimo/run-on-arch-action@v2
+        id: runcmd
         with:
-            version: 11
+          arch: armv7
+          distro: ubuntu20.04
 
-      - name: Install dependencies
-        run: >
+          # Install GCC, build-essential, cmake, git, libbost
+          install: |
             sudo apt-get -y update
-
+            sudo apt-get install -y gcc-arm-none-eabi
             sudo apt-get -y install build-essential cmake git
             libboost-all-dev
+          
 
-      - name: Gen Cache Id
-        run: |
-          echo "::set-output name=timestamp::$(date '+%s')"
-        id: cache-id
 
-      - name: Cache build
-        uses: actions/cache@v2
-        with:
-          path: build
-          key: ${{ matrix.config.os }}-build-${{ steps.cache-id.outputs.timestamp }}
-          restore-keys: |
-            ${{ matrix.config.os }}-build-
+  # build-and-test:
+  #   runs-on: ${{ matrix.config.os }}
+  #   strategy:
+  #     matrix:
+  #       config:
+  #         - os: ubuntu-latest
 
-      - name: Build
-        run: |
-          mkdir -p build && cd build
-          cmake -DUSE_Z3=OFF .. && make solc -j$(nproc)
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v1
 
-      - name: Upload the solc artifact
-        uses: actions/upload-artifact@v2
-        with:
-            name: solc
-            path: build/solc/solc
+  #     - name: Set up GCC
+  #       uses: egor-tensin/setup-gcc@v1
+  #       with:
+  #           version: 11
+
+  #     - name: Install dependencies
+  #       run: >
+  #           sudo apt-get -y update
+
+  #           sudo apt-get -y install build-essential cmake git
+  #           libboost-all-dev
+
+  #     - name: Gen Cache Id
+  #       run: |
+  #         echo "::set-output name=timestamp::$(date '+%s')"
+  #       id: cache-id
+
+  #     - name: Cache build
+  #       uses: actions/cache@v2
+  #       with:
+  #         path: build
+  #         key: ${{ matrix.config.os }}-build-${{ steps.cache-id.outputs.timestamp }}
+  #         restore-keys: |
+  #           ${{ matrix.config.os }}-build-
+
+  #     - name: Build
+  #       run: |
+  #         mkdir -p build && cd build
+  #         cmake -DUSE_Z3=OFF .. && make solc -j$(nproc)
+
+  #     - name: Upload the solc artifact
+  #       uses: actions/upload-artifact@v2
+  #       with:
+  #           name: solc
+  #           path: build/solc/solc
