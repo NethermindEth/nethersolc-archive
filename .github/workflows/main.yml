@@ -23,18 +23,20 @@ jobs:
           # Install dependencies
           install: |
             apt-get -y update
-            apt-get install -y gcc-arm-none-eabi
-            apt-get -y install build-essential cmake git libboost-all-dev
+        # apt-get install -y gcc-arm-none-eabi
+        # apt-get -y install build-essential cmake git libboost-all-dev
 
           # Set an output parameter `uname` for use in subsequent steps
           run: |
-            uname -a
-            echo ::set-output name=uname::$(uname -a)
+            echo "::set-output name=timestamp::$(date '+%s')"
 
-      - name: Get the output
-        # Echo the `uname` output parameter from the `runcmd` step
-        run: |
-          echo "The uname output was ${{ steps.runcmd.outputs.uname }}"
+      - name: Cache Build
+        uses: actions/cache@v2
+        with:
+          path: build
+          key: ubuntu-20.04-build-${{ steps.cache-id.outputs.timestamp }}
+          restore-keys: |
+            ubuntu-20.04-build-
 
 
   # build-and-test:
