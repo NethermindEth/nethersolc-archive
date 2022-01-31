@@ -29,19 +29,21 @@ jobs:
           # Get Timestamp Output
           run: |
             echo "::set-output name=timestamp::$(date '+%s')"
+            mkdir -p build && cd build
+            cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make solc -j$(nproc)
 
-      - name: Cache Build
-        uses: actions/cache@v2
-        with:
-          path: build
-          key: ubuntu-20.04-build-${{ steps.cache-id.outputs.timestamp }}
-          restore-keys: |
-            ubuntu-20.04-build-
+      # - name: Cache Build
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: build
+      #     key: ubuntu-20.04-build-${{ steps.cache-id.outputs.timestamp }}
+      #     restore-keys: |
+      #       ubuntu-20.04-build-
       
-      - name: Build solc
-        run: |
-          mkdir -p build_solc && cd build_solc
-          cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make solc -j$(nproc)
+      # - name: Build solc
+      #   run: |
+      #     mkdir -p build && cd build
+      #     cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make solc -j$(nproc)
 
 
   # build-and-test:
