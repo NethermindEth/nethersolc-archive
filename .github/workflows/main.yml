@@ -23,8 +23,8 @@ jobs:
           # Install dependencies
           install: |
             apt-get -y update
-        # apt-get install -y gcc-arm-none-eabi
-        # apt-get -y install build-essential cmake git libboost-all-dev
+            apt-get install -y gcc-arm-none-eabi
+            apt-get -y install build-essential cmake git libboost-all-dev
 
           # Get Timestamp Output
           run: |
