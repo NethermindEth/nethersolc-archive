@@ -46,10 +46,9 @@ jobs:
 
           # Install dependencies
           install: |
-            sudo apt-get -y update
-            sudo apt-get install -y gcc-arm-none-eabi
-            sudo apt-get -y install build-essential cmake git
-            libboost-all-dev
+            apt-get -y update
+            apt-get install -y gcc-arm-none-eabi
+            apt-get -y install build-essential cmake git libboost-all-dev
 
           # Set an output parameter `uname` for use in subsequent steps
           run: |
