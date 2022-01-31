@@ -1,10 +1,10 @@
 name: Build and test
 
 on:
-  workflow_dispatch:
+  # workflow_dispatch:
   push:
     branches: [ arm_build ]
-  pull_request:
+  # pull_request:
 
 jobs:
   build-and-test-arm:
@@ -12,11 +12,9 @@ jobs:
     name: Build on ubuntu-20.04 armv7
     
     steps:
-      - name: Checkout code
       - uses: actions/checkout@v1
-      
-      - name: Run on ARM
       - uses: uraimo/run-on-arch-action@v2
+        name: Run Commands
         id: runcmd
         with:
           arch: armv7
