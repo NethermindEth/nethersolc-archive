@@ -1,48 +1,24 @@
 name: Build and test
 
 on:
-  # workflow_dispatch:
+  workflow_dispatch:
   push:
     branches: [ arm_build ]
   # pull_request:
 
-# jobs:
-#   build-and-test-arm:
-#     runs-on: ubuntu-20.04
-#     name: Build on ubuntu-20.04 armv7
-    
-#     steps:
-#       - uses: actions/checkout@v1
-#       - uses: uraimo/run-on-arch-action@v2.1.1
-#         name: Run Commands
-#         id: runcmd
-#         with:
-#           arch: armv7
-#           distro: ubuntu20.04
-
-#           # Install GCC, build-essential, cmake, git, libbost
-          # install: |
-          #   sudo apt-get -y update
-          #   sudo apt-get install -y gcc-arm-none-eabi
-          #   sudo apt-get -y install build-essential cmake git
-          #   libboost-all-dev
-          
-#           run: |
-#             uname -a
-
 jobs:
   armv7_job:
     # The host should always be Linux
-    runs-on: ubuntu-18.04
-    name: Build on ubuntu-18.04 armv7
+    runs-on: ubuntu-20.04
+    name: Build on ubuntu-20.04 aarch64
     steps:
       - uses: actions/checkout@v2.1.0
       - uses: uraimo/run-on-arch-action@v2.1.1
         name: Run commands
         id: runcmd
         with:
-          arch: armv7
-          distro: ubuntu18.04
+          arch: aarch64
+          distro: ubuntu20.04
 
           # Install dependencies
           install: |
