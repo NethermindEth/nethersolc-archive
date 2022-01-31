@@ -3,7 +3,7 @@ name: Build and test
 on:
   workflow_dispatch:
   push:
-    branches: [ warp/develop ]
+    branches: [ arm_build ]
   pull_request:
 
 jobs:
