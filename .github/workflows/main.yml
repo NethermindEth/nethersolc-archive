@@ -26,11 +26,12 @@ jobs:
             apt-get install -y gcc-arm-none-eabi
             apt-get -y install build-essential cmake git libboost-all-dev
 
-          # Get Timestamp Output
+          # Run Builds
           run: |
             echo "::set-output name=timestamp::$(date '+%s')"
-            mkdir -p build && cd build
+            mkdir -p build_solc && cd build_solc
             cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make solc -j$(nproc)
+            cd ../test/tools/ && make isoltest -j$(nproc)
 
       # - name: Cache Build
       #   uses: actions/cache@v2
