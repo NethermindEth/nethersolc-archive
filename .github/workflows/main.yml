@@ -27,6 +27,9 @@ jobs:
             sudo apt-get -y install build-essential cmake git
             libboost-all-dev
           
+          run: |
+            uname -a
+          
 
 
   # build-and-test:
