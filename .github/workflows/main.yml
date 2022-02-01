@@ -8,11 +8,11 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ${{ matrix.config.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        config:
-          - os: ubuntu-latest
+        binary: ["isoltest", "solc"]
+        
 
     steps:
       - name: Checkout code
@@ -26,7 +26,6 @@ jobs:
       - name: Install dependencies
         run: >
             sudo apt-get -y update
-
             sudo apt-get -y install build-essential cmake git
             libboost-all-dev
 
@@ -39,17 +38,33 @@ jobs:
         uses: actions/cache@v2
         with:
           path: build
-          key: ${{ matrix.config.os }}-build-${{ steps.cache-id.outputs.timestamp }}
+          key: ${{ matrix.binary }}-build-${{ steps.cache-id.outputs.timestamp }}
           restore-keys: |
-            ${{ matrix.config.os }}-build-
+            ${{ matrix.binary }}-build-
 
-      - name: Build
+      - name: Build solc
+        if: ${{ matrix.binary }} == "solc"
         run: |
           mkdir -p build && cd build
-          cmake -DUSE_Z3=OFF .. && make solc -j$(nproc)
+          cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make solc -j$(nproc)
+          
+      - name: Build isoltest
+        if: ${{ matrix.binary }} == "isoltest"
+        run: |
+          cd test/tools/
+          mkdir -p build && cd build
+          cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make isoltest -j$(nproc)
 
       - name: Upload the solc artifact
+        if: ${{ matrix.binary }} == "solc"
         uses: actions/upload-artifact@v2
         with:
             name: solc
             path: build/solc/solc
+
+      - name: Upload the isoltest artifact
+        if: ${{ matrix.binary }} == "isoltest"
+        uses: actions/upload-artifact@v2
+        with:
+            name: isoltest
+            path: test/tools/build/isoltest
