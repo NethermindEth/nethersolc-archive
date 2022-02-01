@@ -53,9 +53,8 @@ jobs:
       - name: Build isoltest
         if: ${{ steps.settings.outputs.binary == 'isoltest' }}
         run: |
-          cd test/tools/
           mkdir -p build && cd build
-          cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make isoltest -j$(nproc)
+          cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && cd ../test/tools/ && make isoltest -j$(nproc)
 
       - name: Upload the solc artifact
         if: ${{ steps.settings.outputs.binary == 'solc' }}
