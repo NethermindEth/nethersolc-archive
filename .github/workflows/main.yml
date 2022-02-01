@@ -68,4 +68,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
             name: isoltest
-            path: test/tools/build/isoltest
+            path: build/test/tools/isoltest
