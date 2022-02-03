@@ -64,7 +64,10 @@ void printSemanticTests(std::string path)
 				jsonFunc["signature"] = call.signature;
 				jsonFunc["expectations"] = toHex(call.expectations.rawBytes(), HexPrefix::Add);
 				jsonFunc["failure"] = call.expectations.failure;
-
+				for (auto const& expectation: call.expectedSideEffects)
+				{
+					jsonFunc["expectedSideEffects"].append(expectation);
+				}
 				testData.append(jsonFunc);
 			}
 			callData[entry.path().string()] = testData;
