@@ -5,6 +5,8 @@ jobs:
     parameters:
       xcode:
         type: string
+      binary:
+        type: string
     resource_class: macos.x86.medium.gen2
     macos:
       xcode: << parameters.xcode >>
@@ -21,26 +23,26 @@ jobs:
       - when:
           condition: 
             equal: [ solc, << parameters.binary >>]
-           steps:
-             - run: 
-                 name: Build solc
-                 command: |
-                   mkdir -p build && cd build
-                   cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make solc -j$(nproc)
-             - store_artifacts:
-                 path: build/solc/solc
+          steps:
+            - run: 
+                name: Build solc
+                command: |
+                  mkdir -p build && cd build
+                  cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make solc -j$(nproc)
+            - store_artifacts:
+                path: build/solc/solc
                  
       - when:
           condition: 
             equal: [ isoltest, << parameters.binary >>]
-           steps:
-             - run: 
-                 name: Build isoltest
-                 command: |
-                   mkdir -p build && cd build
-                   cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && cd test/tools/ && make isoltest -j$(nproc)
-             - store_artifacts:
-                 path: build/test/tools/isoltest
+          steps:
+            - run: 
+                name: Build isoltest
+                command: |
+                  mkdir -p build && cd build
+                  cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && cd test/tools/ && make isoltest -j$(nproc)
+            - store_artifacts:
+                path: build/test/tools/isoltest
  
       - save_cache:
           key: macos-build-<< parameters.xcode >>-{{ .Branch }}-{{ .Environment.CIRCLE_SHA1 }}
