@@ -5,9 +5,7 @@ jobs:
     parameters:
       xcode:
         type: string
-      binary:
-        type: string
-    resource_class: macos.x86.medium.gen2
+    resource_class: medium
     macos:
       xcode: << parameters.xcode >>
     steps:
@@ -20,29 +18,17 @@ jobs:
       - run:
           name: Install Dependencies
           command: brew install cmake boost icu4c fmt
-      - when:
-          condition: 
-            equal: [ solc, << parameters.binary >>]
-          steps:
-            - run: 
-                name: Build solc
-                command: |
-                  mkdir -p build && cd build
-                  cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make solc -j$(nproc)
-            - store_artifacts:
-                path: build/solc/solc
-                 
-      - when:
-          condition: 
-            equal: [ isoltest, << parameters.binary >>]
-          steps:
-            - run: 
-                name: Build isoltest
-                command: |
-                  mkdir -p build && cd build
-                  cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && cd test/tools/ && make isoltest -j$(nproc)
-            - store_artifacts:
-                path: build/test/tools/isoltest
+      - run: 
+          name: Build solc and isoltest binaries
+          no_output_timeout: 20m
+          command: |
+            mkdir -p build && cd build
+            cmake -DUSE_Z3=OFF -DCMAKE_BUILD_TYPE="Release" .. && make solc -j$(nproc)
+            cd test/tools/ && make isoltest -j$(nproc)
+      - store_artifacts:
+          path: build/solc/solc
+      - store_artifacts:
+          path: build/test/tools/isoltest
  
       - save_cache:
           key: macos-build-<< parameters.xcode >>-{{ .Branch }}-{{ .Environment.CIRCLE_SHA1 }}
@@ -59,5 +45,4 @@ workflows:
           matrix:
             parameters:
               xcode: [13.2.1, 12.4.0]
-              binary: [solc, isoltest]
              
