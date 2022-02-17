@@ -24,7 +24,6 @@
 #include <test/libsolidity/GasTest.h>
 #include <test/libsolidity/SyntaxTest.h>
 #include <test/libsolidity/SemanticTest.h>
-#include <test/libsolidity/SMTCheckerTest.h>
 #include <test/libyul/ControlFlowGraphTest.h>
 #include <test/libyul/EVMCodeTransformTest.h>
 #include <test/libyul/EwasmTranslationTest.h>
@@ -72,7 +71,6 @@ Testsuite const g_interactiveTestsuites[] = {
 	{"Semantic",               "libsolidity", "semanticTests",         false, true,  &SemanticTest::create},
 	{"JSON AST",               "libsolidity", "ASTJSON",               false, false, &ASTJSONTest::create},
 	{"JSON ABI",               "libsolidity", "ABIJson",               false, false, &ABIJsonTest::create},
-	{"SMT Checker",            "libsolidity", "smtCheckerTests",       true,  false, &SMTCheckerTest::create},
 	{"Gas Estimates",          "libsolidity", "gasTests",              false, false, &GasTest::create},
 	{"Ewasm Translation",      "libyul",      "ewasmTranslationTests", false, false, &yul::test::EwasmTranslationTest::create}
 };
