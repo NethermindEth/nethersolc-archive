@@ -8,9 +8,10 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: ["ubuntu-latest", "macos-10.15"]
         binary: ["isoltest", "solc"]
         
 
@@ -18,31 +19,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v1
         
-      - name: Set up GCC
-        uses: egor-tensin/setup-gcc@v1
-        with:
-            version: 11
-
-      - name: Install dependencies
-        run: >
-            sudo apt-get -y update
-            
-            sudo apt-get -y install build-essential cmake git
-            libboost-all-dev
-
       - name: Settings
         run: |
           echo "::set-output name=timestamp::$(date '+%s')"
           echo ::set-output name=binary::${{ matrix.binary }}
+          echo ::set-output name=os::${{ matrix.os }}
         id: settings
+        
+      - name: Set up GCC
+        if: ${{ steps.settings.outputs.os == 'ubuntu-latest' }}
+        uses: egor-tensin/setup-gcc@v1
+        with:
+            version: 11
+
+      - name: Install dependencies (Linux)
+        if: ${{ steps.settings.outputs.os == 'ubuntu-latest' }}
+        run: |
+            sudo apt-get -y update
+            sudo apt-get -y install build-essential cmake git libboost-all-dev
+            
+      - name: Install dependencies (macOS)
+        if: ${{ steps.settings.outputs.os == 'macos-10.15' }}
+        run: brew install cmake boost icu4c fmt
 
       - name: Cache build
         uses: actions/cache@v2
         with:
           path: build
-          key: ${{ steps.settings.outputs.binary }}-build-${{ steps.settings.outputs.timestamp }}
+          key: ${{ steps.settings.outputs.binary }}-${{ matrix.os}}-build-${{ steps.settings.outputs.timestamp }}
           restore-keys: |
-            ${{ matrix.binary }}-build-
+            ${{ matrix.binary }}-${{ matrix.os}}-build-
 
       - name: Build solc
         if: ${{ steps.settings.outputs.binary == 'solc' }}
@@ -60,12 +66,12 @@ jobs:
         if: ${{ steps.settings.outputs.binary == 'solc' }}
         uses: actions/upload-artifact@v2
         with:
-            name: solc
+            name: solc-${{ steps.settings.outputs.os }}
             path: build/solc/solc
 
       - name: Upload the isoltest artifact
         if: ${{ steps.settings.outputs.binary == 'isoltest' }}
         uses: actions/upload-artifact@v2
         with:
-            name: isoltest
+            name: isoltest-${{ steps.settings.outputs.os }}
             path: build/test/tools/isoltest
