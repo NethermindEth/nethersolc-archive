@@ -264,12 +264,12 @@ void ExpressionCompiler::appendStateVariableAccessor(VariableDeclaration const& 
 		retSizeOnStack = returnTypes.front()->sizeOnStack();
 	}
 	solAssert(retSizeOnStack == utils().sizeOnStack(returnTypes), "");
-	if (retSizeOnStack > 15)
-		BOOST_THROW_EXCEPTION(
-			StackTooDeepError() <<
-			errinfo_sourceLocation(_varDecl.location()) <<
-			errinfo_comment("Stack too deep.")
-		);
+	// if (retSizeOnStack > 15)
+	// 	BOOST_THROW_EXCEPTION(
+	// 		StackTooDeepError() <<
+	// 		errinfo_sourceLocation(_varDecl.location()) <<
+	// 		errinfo_comment("Stack too deep.")
+	// 	);
 	m_context << dupInstruction(retSizeOnStack + 1);
 	m_context.appendJump(evmasm::AssemblyItem::JumpType::OutOfFunction);
 }
@@ -346,12 +346,12 @@ bool ExpressionCompiler::visit(Assignment const& _assignment)
 		}
 		if (lvalueSize > 0)
 		{
-			if (itemSize + lvalueSize > 16)
-				BOOST_THROW_EXCEPTION(
-					StackTooDeepError() <<
-					errinfo_sourceLocation(_assignment.location()) <<
-					errinfo_comment("Stack too deep, try removing local variables.")
-				);
+			// if (itemSize + lvalueSize > 16)
+			// 	BOOST_THROW_EXCEPTION(
+			// 		StackTooDeepError() <<
+			// 		errinfo_sourceLocation(_assignment.location()) <<
+			// 		errinfo_comment("Stack too deep, try removing local variables.")
+			// 	);
 			// value [lvalue_ref] updated_value
 			for (unsigned i = 0; i < itemSize; ++i)
 				m_context << swapInstruction(itemSize + lvalueSize) << Instruction::POP;

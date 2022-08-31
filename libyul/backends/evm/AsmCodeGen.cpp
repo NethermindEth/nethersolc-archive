@@ -57,11 +57,11 @@ void CodeGenerator::assemble(
 			CodeTransform::UseNamedLabels::Never
 	);
 	transform(_parsedData);
-	if (!transform.stackErrors().empty())
-		assertThrow(
-			false,
-			langutil::StackTooDeepError,
-			"Stack too deep when compiling inline assembly" +
-			(transform.stackErrors().front().comment() ? ": " + *transform.stackErrors().front().comment() : ".")
-		);
+	// if (!transform.stackErrors().empty())
+	// 	assertThrow(
+	// 		false,
+	// 		langutil::StackTooDeepError,
+	// 		"Stack too deep when compiling inline assembly" +
+	// 		(transform.stackErrors().front().comment() ? ": " + *transform.stackErrors().front().comment() : ".")
+	// 	);
 }

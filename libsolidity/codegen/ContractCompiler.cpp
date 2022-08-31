@@ -668,12 +668,12 @@ bool ContractCompiler::visit(FunctionDefinition const& _function)
 	for (size_t i = 0; i < c_returnValuesSize; ++i)
 		stackLayout.push_back(static_cast<int>(i));
 
-	if (stackLayout.size() > 17)
-		BOOST_THROW_EXCEPTION(
-			StackTooDeepError() <<
-			errinfo_sourceLocation(_function.location()) <<
-			errinfo_comment("Stack too deep, try removing local variables.")
-		);
+	// if (stackLayout.size() > 17)
+	// 	BOOST_THROW_EXCEPTION(
+	// 		StackTooDeepError() <<
+	// 		errinfo_sourceLocation(_function.location()) <<
+	// 		errinfo_comment("Stack too deep, try removing local variables.")
+	// 	);
 	while (!stackLayout.empty() && stackLayout.back() != static_cast<int>(stackLayout.size() - 1))
 		if (stackLayout.back() < 0)
 		{
@@ -838,12 +838,12 @@ bool ContractCompiler::visit(InlineAssembly const& _inlineAssembly)
 					}
 					else
 						solAssert(variable->type()->sizeOnStack() == 1, "");
-					if (stackDiff < 1 || stackDiff > 16)
-						BOOST_THROW_EXCEPTION(
-							StackTooDeepError() <<
-							errinfo_sourceLocation(_inlineAssembly.location()) <<
-							errinfo_comment("Stack too deep, try removing local variables.")
-						);
+					// if (stackDiff < 1 || stackDiff > 16)
+					// 	BOOST_THROW_EXCEPTION(
+					// 		StackTooDeepError() <<
+					// 		errinfo_sourceLocation(_inlineAssembly.location()) <<
+					// 		errinfo_comment("Stack too deep, try removing local variables.")
+					// 	);
 					_assembly.appendInstruction(dupInstruction(stackDiff));
 				}
 				else
@@ -912,12 +912,12 @@ bool ContractCompiler::visit(InlineAssembly const& _inlineAssembly)
 			else
 				solAssert(suffix.empty(), "");
 
-			if (stackDiff > 16 || stackDiff < 1)
-				BOOST_THROW_EXCEPTION(
-					StackTooDeepError() <<
-					errinfo_sourceLocation(_inlineAssembly.location()) <<
-					errinfo_comment("Stack too deep(" + to_string(stackDiff) + "), try removing local variables.")
-				);
+			// if (stackDiff > 16 || stackDiff < 1)
+			// 	BOOST_THROW_EXCEPTION(
+			// 		StackTooDeepError() <<
+			// 		errinfo_sourceLocation(_inlineAssembly.location()) <<
+			// 		errinfo_comment("Stack too deep(" + to_string(stackDiff) + "), try removing local variables.")
+			// 	);
 			_assembly.appendInstruction(swapInstruction(stackDiff));
 			_assembly.appendInstruction(Instruction::POP);
 		}

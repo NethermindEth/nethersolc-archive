@@ -418,12 +418,12 @@ void CompilerContext::appendInlineAssembly(
 		size_t stackDiff = static_cast<size_t>(_assembly.stackHeight()) - startStackHeight + stackDepth;
 		if (_context == yul::IdentifierContext::LValue)
 			stackDiff -= 1;
-		if (stackDiff < 1 || stackDiff > 16)
-			BOOST_THROW_EXCEPTION(
-				StackTooDeepError() <<
-				errinfo_sourceLocation(nativeLocationOf(_identifier)) <<
-				util::errinfo_comment("Stack too deep (" + to_string(stackDiff) + "), try removing local variables.")
-			);
+		// if (stackDiff < 1 || stackDiff > 16)
+		// 	BOOST_THROW_EXCEPTION(
+		// 		StackTooDeepError() <<
+		// 		errinfo_sourceLocation(nativeLocationOf(_identifier)) <<
+		// 		util::errinfo_comment("Stack too deep (" + to_string(stackDiff) + "), try removing local variables.")
+		// 	);
 		if (_context == yul::IdentifierContext::RValue)
 			_assembly.appendInstruction(dupInstruction(static_cast<unsigned>(stackDiff)));
 		else
